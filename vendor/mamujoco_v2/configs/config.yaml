@@ -1,0 +1,78 @@
+# MAPPO / HAPPO / MAT 的配置（HARL 为 MuJoCo 调好的 PPO 超参）。训练时：common 段 + 所选算法段（算法段的键合并进 common 的顶层）。
+# 命令行覆盖用点路径：--set training.actor_lr=0.001、--set network.use_agent_id=true
+# env 段由 tello_rl/train_marl.py 按四机降落环境整段替换。
+
+# ============================== 公共 ==============================
+common:
+  seed: 0
+  device: cuda                        # cpu / cuda / cuda:0
+  num_threads: 1
+
+  env: {}                             # 由 train_marl.py 填写
+
+  network:
+    hidden_dim: 128
+    use_gru: false
+    use_agent_id: true                # actor 输入拼 agent one-hot
+
+  sigma:                              # 对角高斯标准差，逐 agent、逐动作维可学习
+    parameterization: sigmoid         # sigmoid：σ ∈ [minimum, maximum]；exp：σ = floor + exp(raw)
+    initial: 0.45
+    minimum: 0.1
+    maximum: 0.5
+    floor: 0.0                        # 仅 exp 使用
+    state_dependent: false
+
+  normalization:
+    observations: true                # obs / state 归一化并截断到 ±observation_clip
+    observation_clip: 10.0
+    rewards: true
+    returns: true
+
+  training:
+    total_env_steps: 10000000
+    epochs: 5
+    minibatch_size: 4000              # 一个样本 = 某时刻全部 agent；4 条 episode 共 4000 步 = 1 个 minibatch
+    bptt_steps: null                  # GRU 梯度截断长度，null = 整局
+    gamma: 0.99
+    gae_lambda: 0.95
+    gae_value: online                 # online：本次更新前的 critic 算一次 GAE；target：每个 epoch 用 target critic 重算
+    target_tau: 0.01                  # target critic 软更新系数（仅 gae_value=target 时影响训练）
+    normalize_advantages: true
+    clip_ratio: 0.1
+    log_ratio_clip: 3.0               # ratio 计算前把 log ratio 截断到 ±3，防溢出
+    entropy_coef: 0.0
+    grad_norm_clip: 10.0
+    actor_lr: 0.0005
+    critic_lr: 0.0005
+    optimizer_eps: 1.0e-8
+    critic_minibatches: 1
+    batch_steps: 0
+
+  evaluation:
+    interval: 50000
+    episodes: 16                      # 固定 reset seed
+    sample_flow_noise: false          # runner 的接口项（MAPPO / HAPPO / MAT 不使用）
+    sample_action_noise: false        # 评估时不加终端高斯噪声
+
+  output:
+    directory: results                # 相对本目录；results/<algo>/<experiment>/seed_<seed>/<时间戳>/
+    experiment: null                  # null = <scenario>_<agent_conf>
+    log_interval: 10000
+    checkpoint_interval: 2500000
+
+# ============================== MAPPO ==============================
+# 参数共享 Gaussian actor（MLP 均值）+ 公共 centralized critic；没有额外超参。
+mappo:
+  action_squash: sigmoid
+
+# ============================== HAPPO ==============================
+# 每个 agent 独立 actor（结构同 MAPPO、不共享参数）+ 逐 agent 顺序更新；critic 与 MAPPO 相同。
+happo:
+  fixed_order: false                # false：每次更新随机打乱 agent 顺序（HARL 默认）
+
+# ============================== MAT ==============================
+# Transformer encoder + 按 agent 顺序自回归 decoder；critic 用公共 centralized critic。
+mat:
+  layers: 1                         # encoder / decoder 各自的 block 数（官方 MuJoCo 为 1）
+  attention_heads: 4

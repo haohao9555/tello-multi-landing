@@ -1,0 +1,88 @@
+<?xml version="1.0"?>
+<!--
+  Tello 降落场景：地面 + 降落板（原点）+ Tello（起点 x = -1 m）+ 风场
+
+  运行中改风（Step 3 每回合复位时也是这样设置）：
+    gz topic -t /world/tello_land/wind -m gz.msgs.Wind \
+             -p 'linear_velocity: {x: 0, y: 3}, enable_wind: true'
+-->
+<sdf version="1.9">
+  <world name="tello_land">
+
+    <!-- 物理步长 1 ms；real_time_factor = 1 表示按真实时间速度跑 -->
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <!-- 基础系统：物理计算 / 接收命令（设位姿、复位）/ 把场景发给 GUI -->
+    <plugin filename="gz-sim-physics-system"
+            name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster"/>
+
+    <!-- ============ 风场 ============
+         <wind> 是初始风速（世界系，m/s）。风由外部每 0.1 s 通过 /world/tello_land/wind 设置：
+         RL 环境和录像脚本用 tello_rl/task.py 的 WindModel（平均风 + 湍流 + 阵风 + 风向漂移）生成，
+         所以这里关掉 WindEffects 自带的正弦/噪声，time_for_rise 设到最小，让风立即跟随设置值。
+         WindEffects 对 enable_wind 的 link 施力：F = m * k * (v_wind - v_link)，k = force_approximation_scaling_factor
+         另外旋翼阻力（电机插件）也用相对风速计算，两者共同决定 Tello 被吹偏的程度。 -->
+    <wind>
+      <linear_velocity>0 0 0</linear_velocity>
+    </wind>
+    <plugin filename="gz-sim-wind-effects-system"
+            name="gz::sim::systems::WindEffects">
+      <force_approximation_scaling_factor>0.1</force_approximation_scaling_factor>
+      <horizontal>
+        <magnitude><time_for_rise>0.001</time_for_rise></magnitude>
+        <direction><time_for_rise>0.001</time_for_rise></direction>
+      </horizontal>
+      <vertical><time_for_rise>0.001</time_for_rise></vertical>
+    </plugin>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>50 50</size></plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>50 50</size></plane>
+          </geometry>
+          <material>
+            <ambient>0.6 0.6 0.6 1</ambient>
+            <diffuse>0.6 0.6 0.6 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- model:// 依赖 GZ_SIM_RESOURCE_PATH 指向 models/ 目录 -->
+    <include>
+      <uri>model://landing_pad</uri>
+      <name>landing_pad</name>
+      <pose>0 0 0 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://tello</uri>
+      <name>tello</name>
+      <!-- 机身半高 0.0205 m，放在地面上 -->
+      <pose>-1 0 0.021 0 0 0</pose>
+    </include>
+
+  </world>
+</sdf>

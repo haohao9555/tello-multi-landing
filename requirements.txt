@@ -1,0 +1,9 @@
+# Python 3.12（与 ROS 2 Jazzy / Gazebo Harmonic 的系统 Python 版本一致）
+torch>=2.3
+gymnasium>=1.0
+numpy>=1.26
+pillow>=10.0
+matplotlib>=3.8
+pyyaml>=6.0
+# Gazebo 的 Python 绑定（gz.transport13 / gz.msgs10）随 apt 安装的 gz-harmonic 一起装在 /usr/lib/python3/dist-packages，
+# 代码里会自动加入搜索路径，不需要 pip 安装。录视频还需要系统里的 ffmpeg。

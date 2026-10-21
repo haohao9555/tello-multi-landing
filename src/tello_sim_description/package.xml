@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>tello_sim_description</name>
+  <version>0.1.0</version>
+  <description>Tello 降落仿真的 Gazebo 资源：Tello 模型、降落板、带风场的 world</description>
+  <maintainer email="243935570+haohao9555@users.noreply.github.com">haohao9555</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

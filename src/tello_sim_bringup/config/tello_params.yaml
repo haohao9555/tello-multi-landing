@@ -1,0 +1,17 @@
+tello_sim_interface:
+  ros__parameters:
+    use_sim_time: true
+
+    # 归一化指令 [-1, 1]（对应 Tello rc -100..100）乘以下面的最大值得到实际指令
+    # 真机辨识后按实测修改
+    v_max_xy: 1.0        # m/s
+    v_max_z: 1.0         # m/s
+    yaw_rate_max: 1.0    # rad/s
+
+    # 指令延迟，单位是"条指令"（10 Hz 控制时 1 条 = 0.1 s），用来模拟 WiFi 延迟
+    delay_steps: 0
+
+    takeoff_height: 1.0  # m，相对起飞点
+    takeoff_speed: 0.5   # m/s
+    land_speed: 0.4      # m/s
+    cmd_timeout: 0.5     # s，超过这么久没收到指令就自动悬停（松开键盘即停）

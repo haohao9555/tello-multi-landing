@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<sdf version="1.9">
+  <model name="landing_pad">
+    <static>true</static>
+    <link name="link">
+      <!-- 板子本体：上表面在 z = 0.01 m -->
+      <pose>0 0 0.005 0 0 0</pose>
+      <collision name="collision">
+        <geometry><box><size>0.4 0.4 0.01</size></box></geometry>
+      </collision>
+      <visual name="base">
+        <geometry><box><size>0.4 0.4 0.01</size></box></geometry>
+        <material>
+          <ambient>1.0 0.45 0.0 1</ambient>
+          <diffuse>1.0 0.45 0.0 1</diffuse>
+        </material>
+      </visual>
+      <!-- 以下只是外观（无碰撞），略高于板面避免闪烁 -->
+      <visual name="target_ring">
+        <pose>0 0 0.0055 0 0 0</pose>
+        <geometry><cylinder><radius>0.15</radius><length>0.001</length></cylinder></geometry>
+        <material>
+          <ambient>1 1 1 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+        </material>
+      </visual>
+      <visual name="center_dot">
+        <pose>0 0 0.006 0 0 0</pose>
+        <geometry><cylinder><radius>0.03</radius><length>0.001</length></cylinder></geometry>
+        <material>
+          <ambient>0.1 0.1 0.1 1</ambient>
+          <diffuse>0.1 0.1 0.1 1</diffuse>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

@@ -1,0 +1,29 @@
+# ROS 2 话题 <-> Gazebo 话题对应表（ros_gz_bridge 读取）
+# 注意：/world/tello_land/... 里的 tello_land 是 world 名，换 world 时要同步修改
+
+# 仿真时钟：ROS 节点设置 use_sim_time 后以它为准
+- ros_topic_name: /clock
+  gz_topic_name: /world/tello_land/clock
+  ros_type_name: rosgraph_msgs/msg/Clock
+  gz_type_name: gz.msgs.Clock
+  direction: GZ_TO_ROS
+
+# 真值里程计：位姿在世界系，速度在机体系
+- ros_topic_name: /tello/odom
+  gz_topic_name: /model/tello/odometry
+  ros_type_name: nav_msgs/msg/Odometry
+  gz_type_name: gz.msgs.Odometry
+  direction: GZ_TO_ROS
+
+# 以下两个只给接口节点用（m/s 和电机开关），外部请用 /tello/cmd_vel 和起降服务
+- ros_topic_name: /tello/sim/cmd_vel
+  gz_topic_name: /tello/gazebo/command/twist
+  ros_type_name: geometry_msgs/msg/Twist
+  gz_type_name: gz.msgs.Twist
+  direction: ROS_TO_GZ
+
+- ros_topic_name: /tello/sim/enable
+  gz_topic_name: /tello/enable
+  ros_type_name: std_msgs/msg/Bool
+  gz_type_name: gz.msgs.Boolean
+  direction: ROS_TO_GZ

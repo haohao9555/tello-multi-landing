@@ -1,0 +1,315 @@
+<?xml version="1.0"?>
+<!--
+  DJI Tello 近似模型（基于 gz-sim X3 的插件，参数按 Tello 缩放）
+
+  话题（robotNamespace = tello）：
+    /tello/gazebo/command/twist   gz.msgs.Twist    速度指令（机体系，vx vy vz + yaw rate）
+    /tello/enable                 gz.msgs.Boolean  控制器开关（false 时电机停转）
+    /model/tello/odometry         gz.msgs.Odometry 真值位姿（世界系）+ 速度（机体系）
+
+  参数换算（以 X3 为参考，保持闭环动态相近）：
+    - 速度环： accel = velocityGain * v_err / mass  -> velocityGain 按质量缩放
+    - 姿态环： angAcc = attitudeGain * err / I       -> 姿态/角速度增益按惯量缩放（并调高带宽）
+    - 推力：   T = motorConstant * w^2，取 w_max = 3000 rad/s，推重比约 2
+    - 旋翼阻力：F = -|w| * rotorDragCoefficient * v_rel（v_rel 含风速）
+-->
+<sdf version="1.9">
+  <model name="tello">
+
+    <!-- ============ 机身 ============ -->
+    <link name="base_link">
+      <!-- 让 WindEffects 对机身施加风力（旋翼的风阻由电机插件单独计算） -->
+      <enable_wind>true</enable_wind>
+      <inertial>
+        <!-- 机身 76 g + 4 个旋翼各 1 g = 80 g（Tello 实测约 80 g） -->
+        <mass>0.076</mass>
+        <!-- 按 98 x 92.5 x 41 mm 实心长方体估算 -->
+        <inertia>
+          <ixx>6.48e-05</ixx>
+          <iyy>7.15e-05</iyy>
+          <izz>1.15e-04</izz>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <collision name="collision">
+        <geometry>
+          <box><size>0.098 0.0925 0.041</size></box>
+        </geometry>
+      </collision>
+      <visual name="body">
+        <geometry>
+          <box><size>0.098 0.0925 0.041</size></box>
+        </geometry>
+        <material>
+          <ambient>0.9 0.9 0.9 1</ambient>
+          <diffuse>0.9 0.9 0.9 1</diffuse>
+        </material>
+      </visual>
+      <!-- 红色小块标出机头（+x 方向） -->
+      <visual name="nose">
+        <pose>0.05 0 0 0 0 0</pose>
+        <geometry>
+          <box><size>0.006 0.03 0.015</size></box>
+        </geometry>
+        <material>
+          <ambient>0.9 0.1 0.1 1</ambient>
+          <diffuse>0.9 0.1 0.1 1</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <!-- ============ 旋翼 ============
+         布局与 X3 相同：0 右前 ccw，1 左后 ccw，2 左前 cw，3 右后 cw
+         电机中心距机体中心 (±0.04, ±0.04) m（估计值），桨径 3 英寸 -->
+    <link name="rotor_0">
+      <pose>0.04 -0.04 0.015 0 0 0</pose>
+      <inertial>
+        <mass>0.001</mass>
+        <inertia>
+          <ixx>2.5e-07</ixx><iyy>2.5e-07</iyy><izz>4.8e-07</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <visual name="disc">
+        <geometry><cylinder><radius>0.038</radius><length>0.001</length></cylinder></geometry>
+        <material><ambient>0.2 0.2 0.2 1</ambient><diffuse>0.2 0.2 0.2 1</diffuse></material>
+        <transparency>0.7</transparency>
+      </visual>
+      <visual name="blade">
+        <geometry><box><size>0.076 0.008 0.002</size></box></geometry>
+        <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+      </visual>
+    </link>
+    <joint name="rotor_0_joint" type="revolute">
+      <parent>base_link</parent>
+      <child>rotor_0</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit><lower>-1e+16</lower><upper>1e+16</upper></limit>
+      </axis>
+    </joint>
+
+    <link name="rotor_1">
+      <pose>-0.04 0.04 0.015 0 0 0</pose>
+      <inertial>
+        <mass>0.001</mass>
+        <inertia>
+          <ixx>2.5e-07</ixx><iyy>2.5e-07</iyy><izz>4.8e-07</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <visual name="disc">
+        <geometry><cylinder><radius>0.038</radius><length>0.001</length></cylinder></geometry>
+        <material><ambient>0.2 0.2 0.2 1</ambient><diffuse>0.2 0.2 0.2 1</diffuse></material>
+        <transparency>0.7</transparency>
+      </visual>
+      <visual name="blade">
+        <geometry><box><size>0.076 0.008 0.002</size></box></geometry>
+        <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+      </visual>
+    </link>
+    <joint name="rotor_1_joint" type="revolute">
+      <parent>base_link</parent>
+      <child>rotor_1</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit><lower>-1e+16</lower><upper>1e+16</upper></limit>
+      </axis>
+    </joint>
+
+    <link name="rotor_2">
+      <pose>0.04 0.04 0.015 0 0 0</pose>
+      <inertial>
+        <mass>0.001</mass>
+        <inertia>
+          <ixx>2.5e-07</ixx><iyy>2.5e-07</iyy><izz>4.8e-07</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <visual name="disc">
+        <geometry><cylinder><radius>0.038</radius><length>0.001</length></cylinder></geometry>
+        <material><ambient>0.2 0.2 0.2 1</ambient><diffuse>0.2 0.2 0.2 1</diffuse></material>
+        <transparency>0.7</transparency>
+      </visual>
+      <visual name="blade">
+        <geometry><box><size>0.076 0.008 0.002</size></box></geometry>
+        <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+      </visual>
+    </link>
+    <joint name="rotor_2_joint" type="revolute">
+      <parent>base_link</parent>
+      <child>rotor_2</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit><lower>-1e+16</lower><upper>1e+16</upper></limit>
+      </axis>
+    </joint>
+
+    <link name="rotor_3">
+      <pose>-0.04 -0.04 0.015 0 0 0</pose>
+      <inertial>
+        <mass>0.001</mass>
+        <inertia>
+          <ixx>2.5e-07</ixx><iyy>2.5e-07</iyy><izz>4.8e-07</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <visual name="disc">
+        <geometry><cylinder><radius>0.038</radius><length>0.001</length></cylinder></geometry>
+        <material><ambient>0.2 0.2 0.2 1</ambient><diffuse>0.2 0.2 0.2 1</diffuse></material>
+        <transparency>0.7</transparency>
+      </visual>
+      <visual name="blade">
+        <geometry><box><size>0.076 0.008 0.002</size></box></geometry>
+        <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+      </visual>
+    </link>
+    <joint name="rotor_3_joint" type="revolute">
+      <parent>base_link</parent>
+      <child>rotor_3</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit><lower>-1e+16</lower><upper>1e+16</upper></limit>
+      </axis>
+    </joint>
+
+    <!-- ============ 电机模型 ×4 ============
+         接收 /tello/gazebo/command/motor_speed（由速度控制器发出），
+         计算推力、反扭矩和旋翼阻力。 -->
+    <plugin filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+      <robotNamespace>tello</robotNamespace>
+      <jointName>rotor_0_joint</jointName>
+      <linkName>rotor_0</linkName>
+      <turningDirection>ccw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp>
+      <timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>3000.0</maxRotVelocity>
+      <motorConstant>4.36e-08</motorConstant>
+      <momentConstant>0.01</momentConstant>
+      <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+      <actuator_number>0</actuator_number>
+      <rotorDragCoefficient>3.0e-06</rotorDragCoefficient>
+      <rollingMomentCoefficient>1e-08</rollingMomentCoefficient>
+      <motorSpeedPubTopic>motor_speed/0</motorSpeedPubTopic>
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+      <motorType>velocity</motorType>
+    </plugin>
+    <plugin filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+      <robotNamespace>tello</robotNamespace>
+      <jointName>rotor_1_joint</jointName>
+      <linkName>rotor_1</linkName>
+      <turningDirection>ccw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp>
+      <timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>3000.0</maxRotVelocity>
+      <motorConstant>4.36e-08</motorConstant>
+      <momentConstant>0.01</momentConstant>
+      <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+      <actuator_number>1</actuator_number>
+      <rotorDragCoefficient>3.0e-06</rotorDragCoefficient>
+      <rollingMomentCoefficient>1e-08</rollingMomentCoefficient>
+      <motorSpeedPubTopic>motor_speed/1</motorSpeedPubTopic>
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+      <motorType>velocity</motorType>
+    </plugin>
+    <plugin filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+      <robotNamespace>tello</robotNamespace>
+      <jointName>rotor_2_joint</jointName>
+      <linkName>rotor_2</linkName>
+      <turningDirection>cw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp>
+      <timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>3000.0</maxRotVelocity>
+      <motorConstant>4.36e-08</motorConstant>
+      <momentConstant>0.01</momentConstant>
+      <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+      <actuator_number>2</actuator_number>
+      <rotorDragCoefficient>3.0e-06</rotorDragCoefficient>
+      <rollingMomentCoefficient>1e-08</rollingMomentCoefficient>
+      <motorSpeedPubTopic>motor_speed/2</motorSpeedPubTopic>
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+      <motorType>velocity</motorType>
+    </plugin>
+    <plugin filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+      <robotNamespace>tello</robotNamespace>
+      <jointName>rotor_3_joint</jointName>
+      <linkName>rotor_3</linkName>
+      <turningDirection>cw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp>
+      <timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>3000.0</maxRotVelocity>
+      <motorConstant>4.36e-08</motorConstant>
+      <momentConstant>0.01</momentConstant>
+      <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+      <actuator_number>3</actuator_number>
+      <rotorDragCoefficient>3.0e-06</rotorDragCoefficient>
+      <rollingMomentCoefficient>1e-08</rollingMomentCoefficient>
+      <motorSpeedPubTopic>motor_speed/3</motorSpeedPubTopic>
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+      <motorType>velocity</motorType>
+    </plugin>
+
+    <!-- ============ 速度控制器 ============
+         输入速度指令（机体系），输出 4 个电机转速。
+         作用相当于 Tello 自带飞控：你发 rc 指令，它负责稳住姿态。 -->
+    <plugin filename="gz-sim-multicopter-control-system"
+            name="gz::sim::systems::MulticopterVelocityControl">
+      <robotNamespace>tello</robotNamespace>
+      <commandSubTopic>gazebo/command/twist</commandSubTopic>
+      <enableSubTopic>enable</enableSubTopic>
+      <comLinkName>base_link</comLinkName>
+      <!-- 0.2 / 0.08 kg = 2.5 1/s，速度响应时间常数约 0.4 s -->
+      <velocityGain>0.2 0.2 0.2</velocityGain>
+      <!-- 增益 / 惯量：姿态 ~400 1/s^2、角速度 ~30 1/s（带宽 ~20 rad/s，阻尼比 ~0.75）。
+           小飞机惯量极小，若照搬 X3 的 ~50，旋翼阻力力矩会把姿态压歪 ~10°。 -->
+      <attitudeGain>0.0288 0.0316 0.0013</attitudeGain>
+      <angularRateGain>0.00216 0.00237 0.00078</angularRateGain>
+      <maximumLinearAcceleration>3 3 3</maximumLinearAcceleration>
+      <maximumLinearVelocity>2 2 2</maximumLinearVelocity>
+      <maximumAngularVelocity>3 3 1.5</maximumAngularVelocity>
+      <rotorConfiguration>
+        <rotor>
+          <jointName>rotor_0_joint</jointName>
+          <forceConstant>4.36e-08</forceConstant>
+          <momentConstant>0.01</momentConstant>
+          <direction>1</direction>
+        </rotor>
+        <rotor>
+          <jointName>rotor_1_joint</jointName>
+          <forceConstant>4.36e-08</forceConstant>
+          <momentConstant>0.01</momentConstant>
+          <direction>1</direction>
+        </rotor>
+        <rotor>
+          <jointName>rotor_2_joint</jointName>
+          <forceConstant>4.36e-08</forceConstant>
+          <momentConstant>0.01</momentConstant>
+          <direction>-1</direction>
+        </rotor>
+        <rotor>
+          <jointName>rotor_3_joint</jointName>
+          <forceConstant>4.36e-08</forceConstant>
+          <momentConstant>0.01</momentConstant>
+          <direction>-1</direction>
+        </rotor>
+      </rotorConfiguration>
+    </plugin>
+
+    <!-- ============ 真值里程计 ============ -->
+    <plugin filename="gz-sim-odometry-publisher-system"
+            name="gz::sim::systems::OdometryPublisher">
+      <dimensions>3</dimensions>
+      <odom_topic>/model/tello/odometry</odom_topic>
+      <odom_publish_frequency>100</odom_publish_frequency>
+      <odom_frame>odom</odom_frame>
+      <robot_base_frame>base_link</robot_base_frame>
+    </plugin>
+
+  </model>
+</sdf>
