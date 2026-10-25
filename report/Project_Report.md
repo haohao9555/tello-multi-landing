@@ -2,7 +2,7 @@
 
 ## Assignment 3, Part E — Project Report
 
-**Project title:** Wind-Aware Multi-Drone Landing: Comparing MAPPO and PPO (IPPO)
+**Project title:** Robust Autonomous Multi-UAV Landing under Wind Disturbances Using PPO
 
 **Group number:** 74
 

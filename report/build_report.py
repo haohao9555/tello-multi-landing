@@ -71,7 +71,7 @@ def to_pdf(content):
         page.pdf(path=str(ROOT/'Project_Report.pdf'),format='A4',print_background=True,
                  display_header_footer=True,
                  header_template='<div></div>',
-                 footer_template='<div style="font-family:Arial;font-size:8px;width:100%;padding:0 19mm;color:#697882;display:flex;justify-content:space-between"><span>43008 · Assignment 3, Part E</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>',
+                 footer_template='<div style="font-family:Arial;font-size:8px;width:100%;padding:0 19mm;color:#697882;display:flex;justify-content:space-between"><span></span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>',
                  prefer_css_page_size=True)
         browser.close()
 
@@ -86,7 +86,7 @@ for name,size in [('Title',23),('Heading 1',16),('Heading 2',12),('Heading 3',11
 for name in ['Heading 1','Heading 2','Heading 3']:
     doc.styles[name].paragraph_format.space_before=Pt(12)
 footer=sec.footer.paragraphs[0];footer.alignment=WD_ALIGN_PARAGRAPH.RIGHT
-footer.add_run('43008 · Part E  |  ').font.size=Pt(8)
+footer.add_run('').font.size=Pt(8)
 fld=OxmlElement('w:fldSimple');fld.set(qn('w:instr'),'PAGE');footer._p.append(fld)
 settings=doc.settings.element
 update=OxmlElement('w:updateFields');update.set(qn('w:val'),'true');settings.append(update)

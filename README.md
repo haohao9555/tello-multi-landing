@@ -1,4 +1,4 @@
-# Wind-Aware Multi-Drone Landing
+# Robust Autonomous Multi-UAV Landing under Wind Disturbances Using PPO
 
 Continuous-control reinforcement learning for four aircraft landing on assigned pads. The project compares **MAPPO** with **parameter-sharing independent PPO (IPPO)** on Tello and Matrice 30 (M30) simulation profiles.
 
