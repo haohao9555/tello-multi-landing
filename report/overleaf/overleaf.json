@@ -1,0 +1,4 @@
+{
+  "compiler": "xelatex",
+  "main": "main.tex"
+}

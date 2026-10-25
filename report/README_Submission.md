@@ -21,3 +21,5 @@ Files:
 Project code: https://github.com/haohao9555/tello-multi-landing
 
 All reported values come from completed experiment records. The earlier example assignment and internal diagnostic files are excluded from this package.
+
+The canonical PDF is now compiled with XeLaTeX. Its main focus is four-UAV landing under wind and aerodynamic drag. MAPPO and PPO provide two training designs within the system. Equations, figure/table references and the bibliography are typeset automatically. Word contains editable native equations. Import `Group74_Overleaf_Project.zip` into Overleaf and select XeLaTeX with `main.tex` as the main document.

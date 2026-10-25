@@ -1,0 +1,60 @@
+% Compile with XeLaTeX. Import this project ZIP directly into Overleaf.
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=22mm]{geometry}
+\usepackage{fontspec}
+\setmainfont{TeX Gyre Termes}
+\setsansfont{TeX Gyre Heros}
+\setmonofont{Latin Modern Mono}
+\usepackage{amsmath,amssymb,mathtools,unicode-math}
+\setmathfont{Latin Modern Math}
+\usepackage{microtype,setspace}
+\setstretch{1.12}
+\usepackage{graphicx,float,booktabs,tabularx,longtable,array,calc}
+\usepackage[export]{adjustbox}
+\usepackage[section]{placeins}
+\usepackage{caption,titlesec}
+\captionsetup{font=small,labelfont=bf,justification=raggedright,singlelinecheck=false,skip=6pt}
+\titleformat{\section}{\Large\sffamily\bfseries}{\thesection}{.7em}{}
+\titleformat{\subsection}{\large\sffamily\bfseries}{\thesubsection}{.7em}{}
+\titleformat{\subsubsection}{\normalsize\sffamily\bfseries}{\thesubsubsection}{.7em}{}
+\titlespacing*{\section}{0pt}{18pt}{9pt}
+\titlespacing*{\subsection}{0pt}{14pt}{6pt}
+\titlespacing*{\subsubsection}{0pt}{11pt}{4pt}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+\setlength{\emergencystretch}{2em}
+\setcounter{tocdepth}{2}
+\setcounter{secnumdepth}{3}
+\usepackage{xcolor,xurl}
+\definecolor{linkblue}{HTML}{175D7B}
+\usepackage[unicode,colorlinks=true,linkcolor=linkblue,urlcolor=linkblue,citecolor=linkblue]{hyperref}
+\hypersetup{pdftitle={Robust Autonomous Multi-UAV Landing under Wind Disturbances Using PPO},pdfauthor={Group 74}}
+\urlstyle{same}
+\providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\newcommand{\passthrough}[1]{#1}
+\newcommand{\signaturefield}[2]{\noindent\makebox[34mm][l]{#1:}%
+\ifdefined\HideSignatures\rule[-5mm]{0pt}{16mm}\else
+\IfFileExists{signatures/#2.png}{\raisebox{-5mm}{\includegraphics[height=16mm]{signatures/#2.png}}}{\rule[-5mm]{0pt}{16mm}}\fi
+\par\vspace{5mm}}
+\begin{document}
+\begin{titlepage}
+\hypersetup{pageanchor=false}\thispagestyle{empty}\vspace*{18mm}
+{\Large\sffamily 43008: Reinforcement Learning\par}\vspace{12mm}
+{\Huge\sffamily\bfseries Project Report\par}\vspace{12mm}
+{\LARGE\sffamily\bfseries Robust Autonomous Multi-UAV Landing under Wind Disturbances Using PPO\par}\vspace{14mm}
+{\large\textbf{Group number:} 74\par}\vspace{10mm}
+\begin{tabularx}{\textwidth}{@{}XX@{}}
+\toprule\textbf{Team member}&\textbf{Student ID}\\\midrule
+Chenghao Zhuang&25965245\\[5pt]
+Bo Zhao&25971060\\[5pt]
+Junqi Zhang&25971159\\\bottomrule
+\end{tabularx}
+\end{titlepage}
+\pagenumbering{roman}\hypersetup{pageanchor=true}\tableofcontents\clearpage
+\phantomsection\section*{Abstract}\addcontentsline{toc}{section}{Abstract}
+{\small\input{abstract.tex}}\clearpage
+\pagenumbering{arabic}\input{content.tex}\clearpage
+\refstepcounter{section}\renewcommand{\refname}{\thesection\quad References}\phantomsection\addcontentsline{toc}{section}{\protect\numberline{\thesection}References}
+\bibliographystyle{ieeetr}\bibliography{references}\clearpage
+\appendix\input{appendices.tex}
+\end{document}

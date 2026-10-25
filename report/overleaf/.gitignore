@@ -1,0 +1,12 @@
+signatures/
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.toc
+*.xdv
+*.fls
+*.fdb_latexmk
+main.pdf
+word_math.md

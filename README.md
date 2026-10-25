@@ -37,7 +37,7 @@ Each entry uses 100 fixed-seed episodes, equivalent to 400 aircraft attempts. Ca
 
 Fleet success requires all four aircraft to land successfully. Landing error includes recorded touchdowns, including missed platforms and hard landings. Results use one training seed and do not establish a uniform algorithm advantage.
 
-[Read the project report](report/Project_Report.pdf) · [Report source](report/Project_Report.md) · [Machine-readable results](docs/results.json)
+[Read the project report](report/Project_Report.pdf) · [Overleaf / LaTeX source](report/overleaf/README.md) · [Report source](report/Project_Report.md) · [Machine-readable results](docs/results.json)
 
 ## Install the Python environment
 
