@@ -1,6 +1,6 @@
 # 43008: Reinforcement Learning
 
-## Assignment 3, Part E — Project Report
+## Project Report
 
 **Project title:** Robust Autonomous Multi-UAV Landing under Wind Disturbances Using PPO
 

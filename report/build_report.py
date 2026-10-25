@@ -29,7 +29,7 @@ toc=[]
 for i,t in enumerate(tokens):
     if t.type=='heading_open' and t.tag in ['h2','h3']:
         text=tokens[i+1].content
-        if text.startswith('Assignment') or text=='Table of Contents':continue
+        if text.startswith('Assignment') or text in ['Project Report', 'Table of Contents']:continue
         toc.append((text,slug(text),t.tag))
 toc_html='<nav class="toc">'+''.join(f'<a class="{tag}" href="#{id}"><span>{html.escape(text)}</span><b data-page="{id}"></b></a>' for text,id,tag in toc)+'</nav>'
 body=re.sub(r'(<h2 id="table-of-contents">Table of Contents</h2>).*?(<hr[^>]*>)',r'\1'+toc_html+r'\2',body,flags=re.S)
@@ -134,7 +134,7 @@ while i<len(tokens):
             while i<len(tokens) and tokens[i].type!='hr':i+=1
             continue
         if text in ['1. Introduction and Background','2.2 System Architecture Design']:doc.add_page_break()
-        if cover and text.startswith('Assignment'):
+        if cover and (text.startswith('Assignment') or text == 'Project Report'):
             p=doc.add_paragraph(style='Subtitle')
         else:
             p=doc.add_heading(level=max(1,int(t.tag[1:])-1)) if t.tag!='h1' else doc.add_paragraph(style='Title')
