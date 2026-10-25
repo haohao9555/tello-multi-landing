@@ -1,9 +1,4 @@
-"""统一评估：每个风速等级跑 N 个回合（固定种子，所有算法面对完全相同的场景）。
-
-用法：
-  python -m tello_rl.evaluate --algo ppo --run runs/ppo_fast_s1 --episodes 100
-输出：每个风级的成功率、着陆误差、着陆速度、用时，并保存 eval_<env>.json
-"""
+"""Evaluate."""
 import argparse
 import importlib
 import json
@@ -14,11 +9,11 @@ import numpy as np
 from tello_rl import task
 from tello_rl.common import make_env
 
-EVAL_SEED = 10_000   # 评估种子从这里开始，和训练种子错开
+EVAL_SEED = 10_000
 
 
-def evaluate(policy, env_id, wind_level, n_episodes):
-    env = make_env(env_id, wind_level=wind_level)
+def evaluate(policy, env_id, wind_level, n_episodes, constant_wind=False):
+    env = make_env(env_id, wind_level=wind_level, constant_wind=constant_wind)
     records = []
     for i in range(n_episodes):
         obs, _ = env.reset(seed=EVAL_SEED + i)
@@ -46,15 +41,16 @@ def evaluate(policy, env_id, wind_level, n_episodes):
 
 def main():
     import torch
-    torch.set_num_threads(1)   # 容器只有约 7.7 核，还有别的实验在跑
+    torch.set_num_threads(1)
     parser = argparse.ArgumentParser()
     parser.add_argument('--algo', required=True, choices=['td3', 'ppo', 'fpo'])
-    parser.add_argument('--run', required=True, help='训练输出目录，如 runs/ppo_fast_s1')
+    parser.add_argument('--run', required=True, help='Training output directory, for example runs/ppo_fast_s1')
     parser.add_argument('--env', default='fast')
     parser.add_argument('--episodes', type=int, default=100)
-    parser.add_argument('--checkpoint', default=None, help='默认用 <algo>_final.pt')
+    parser.add_argument('--checkpoint', default=None, help='Defaults to <algo>_final.pt')
     parser.add_argument('--winds', type=float, nargs='+', default=list(task.WIND_LEVELS),
-                        help='平均风速等级；可加训练时没见过的 4 测泛化')
+                        help='Mean wind levels; include an unseen setting to test generalisation')
+    parser.add_argument('--wind-type', choices=['gusty', 'constant'], default='gusty')
     args = parser.parse_args()
 
     run = Path(args.run)
@@ -64,15 +60,15 @@ def main():
 
     results = []
     print(f'{args.algo.upper()}  {ckpt}')
-    print(f'{"风速":>6} {"成功率":>8} {"着陆误差":>10} {"着陆速度":>10} {"用时":>8}   结果分布')
+    print(f'{"Wind":>6} {"Success":>8} {"Landing error":>10} {"Touchdown speed":>10} {"Duration":>8}   Outcome counts')
     for level in args.winds:
-        r = evaluate(policy, args.env, level, args.episodes)
+        r = evaluate(policy, args.env, level, args.episodes, args.wind_type == 'constant')
         results.append(r)
         fmt = lambda v, f: format(v, f) if v is not None else '-'
         print(f'{level:>4.0f} m/s {r["success_rate"] * 100:>7.1f}% {fmt(r["landing_error"], ".3f"):>9} m '
               f'{fmt(r["touchdown_speed"], ".2f"):>7} m/s {fmt(r["time"], ".1f"):>6} s   {r["outcomes"]}')
 
-    out = run / f'eval_{args.env}.json'
+    out = run / f'eval_{args.env}_{args.wind_type}.json'
     out.write_text(json.dumps(results, indent=2, ensure_ascii=False))
     print(f'-> {out}')
 

@@ -1,14 +1,4 @@
-"""PPO（连续动作，高斯策略）—— 由 ATARI.ipynb 的手写 PPO 改来。
-
-和 Atari 版的区别：
-  - 网络：CNN -> MLP（结构同 CARTPOLE）
-  - 策略：Categorical(logits) -> Normal(μ, σ)；μ 由网络输出，log σ 是独立的可学习参数
-          log_prob / entropy 对动作各维求和；送进环境前把动作裁剪到 [-1, 1]，buffer 里存裁剪前的值
-  - 去掉 np.sign 奖励裁剪和 life_lost
-  - 超参数换成连续控制常用值（clip 0.2、10 epochs、minibatch 64、不加熵奖励）
-
-用法：python -m tello_rl.ppo --env fast --total-steps 300000 --seed 1
-"""
+"""Ppo."""
 import time
 
 import numpy as np
@@ -32,9 +22,9 @@ PPO_GAE_LAMBDA = 0.95
 PPO_CLIP_EPS = 0.2
 PPO_ENT_COEF = 0.0
 PPO_MAX_GRAD_NORM = 0.5
-LOG_STD_INIT = -0.5          # 初始 σ ≈ 0.6
+LOG_STD_INIT = -0.5
 
-EVAL_INTERVAL = 50_000       # 保存 checkpoint 的间隔
+EVAL_INTERVAL = 50_000
 
 
 # actor network
@@ -43,7 +33,7 @@ class Actor(nn.Module):
         super().__init__()
         self.mu = mlp(obs_dim, act_dim)
         self.log_std = nn.Parameter(torch.full((act_dim,), LOG_STD_INIT))
-        orthogonal_init(self.mu, 0.01)   # 初始 μ ≈ 0
+        orthogonal_init(self.mu, 0.01)
 
     def forward(self, x):
         mu = self.mu(x.float())
@@ -159,7 +149,7 @@ def ppo_update(buffer, actor, critic, actor_optimizer, critic_optimizer, device,
 
 
 def make_policy(checkpoint_path, obs_dim, act_dim, device='cpu'):
-    """评估用的确定性策略：直接取 μ。"""
+    """Make policy."""
     actor = Actor(obs_dim, act_dim).to(device)
     actor.load_state_dict(torch.load(checkpoint_path, map_location=device)['actor'])
     actor.eval()
@@ -176,7 +166,7 @@ def main():
     set_seed(args.seed)
     device = torch.device(args.device)
 
-    env = make_env(args.env)
+    env = make_env(args.env, wind_level=args.wind, constant_wind=args.constant_wind)
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
     act_low, act_high = env.action_space.low, env.action_space.high
@@ -204,10 +194,10 @@ def main():
             value = critic(obs_tensor)
         action = action.squeeze(0).cpu().numpy()
 
-        # 2. Environment step（裁剪后的动作送进环境）
+
         next_obs, reward, terminated, truncated, info = env.step(np.clip(action, act_low, act_high))
 
-        # 3. Next state value（真正结束为 0；超时截断则用 critic 估计）
+
         with torch.no_grad():
             if terminated:
                 next_value = 0.0

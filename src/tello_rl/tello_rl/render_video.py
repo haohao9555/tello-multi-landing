@@ -1,9 +1,4 @@
-"""把训练好的策略录成对比视频：几个算法并排，同一初始位置、同一风，按风级依次播放。
-
-用法：
-  python -m tello_rl.render_video --runs td3:runs/td3_fast_s1 ppo:runs/ppo_fast_s1 fpo:runs/fpo_fast_s1
-输出 runs/landing_compare.mp4（10 fps = 实时速度）
-"""
+"""Render video."""
 import argparse
 import importlib
 from pathlib import Path
@@ -43,7 +38,7 @@ def draw_pad(ax):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--runs', nargs='+', required=True, help='algo:run_dir，如 ppo:runs/ppo_fast_s1')
+    parser.add_argument('--runs', nargs='+', required=True, help='algo:run_dir, for example ppo:runs/ppo_fast_s1')
     parser.add_argument('--env', default='fast')
     parser.add_argument('--winds', type=float, nargs='+', default=list(task.WIND_LEVELS))
     parser.add_argument('--seed', type=int, default=10_007)
@@ -64,7 +59,7 @@ def main():
     with writer.saving(fig, args.out, dpi=90):
         for wind in args.winds:
             results = [rollout(policy, args.env, wind, args.seed) for _, policy in algos]
-            n_frames = max(len(frames) for frames, _ in results) + 15   # 结束后停 1.5 s
+            n_frames = max(len(frames) for frames, _ in results) + 15
             for k in range(n_frames):
                 for ax, (name, _), (frames, info) in zip(axes, algos, results):
                     ax.cla()
@@ -73,9 +68,9 @@ def main():
                     pos, w = frames[i]
                     draw_pad(ax)
                     ax.plot(traj[:, 0], traj[:, 1], traj[:, 2], color='tab:blue', lw=1.5)
-                    ax.plot(traj[:, 0], traj[:, 1], 0, color='gray', lw=0.8, alpha=0.5)   # 地面投影
+                    ax.plot(traj[:, 0], traj[:, 1], 0, color='gray', lw=0.8, alpha=0.5)
                     ax.scatter(*pos, color='black', s=40)
-                    # 风向箭头（长度 ∝ 风速）
+
                     ax.quiver(-0.9, -0.9, 1.4, w[0] / 3, w[1] / 3, 0, color='tab:cyan', lw=2)
                     ax.set_xlim(-1, 1), ax.set_ylim(-1, 1), ax.set_zlim(0, 1.6)
                     ax.set_xlabel('x (m)'), ax.set_ylabel('y (m)'), ax.set_zlabel('z (m)')

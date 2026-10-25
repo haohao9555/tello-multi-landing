@@ -1,8 +1,8 @@
-# colcon 编译产物
+
 build/
 install/
 log/
-# 训练输出、打包结果
+
 runs/
 dist/
 # Python

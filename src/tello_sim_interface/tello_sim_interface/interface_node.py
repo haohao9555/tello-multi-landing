@@ -1,17 +1,4 @@
-"""Tello 仿真接口节点：让仿真对外暴露和真机驱动相同的 ROS 2 接口。
-
-对外接口（以后换成真机驱动时保持不变）：
-  订阅  /tello/cmd_vel   geometry_msgs/Twist  归一化指令 [-1, 1]，对应 Tello rc -100..100
-                                             linear.x 前后，linear.y 左右，linear.z 上下，angular.z 偏航
-  发布  /tello/status    std_msgs/String      LANDED / TAKING_OFF / FLYING / LANDING
-  服务  /tello/takeoff   std_srvs/Trigger     起飞到 takeoff_height 后悬停（立即返回，看 status）
-  服务  /tello/land      std_srvs/Trigger     匀速下降，触地后关电机（立即返回，看 status）
-  （/tello/odom 由 ros_gz_bridge 直接发布）
-
-对内（经 ros_gz_bridge 进 Gazebo）：
-  /tello/sim/cmd_vel  geometry_msgs/Twist  m/s、rad/s
-  /tello/sim/enable   std_msgs/Bool        电机开关
-"""
+"""Interface node."""
 from collections import deque
 
 import rclpy
@@ -51,8 +38,8 @@ class TelloSimInterface(Node):
         self.z = 0.0
         self.vz = 0.0
         self.target_z = 0.0
-        self.landing_start = None    # 开始降落的仿真时间
-        self.stalled_since = None    # 下降指令下速度接近 0 的起始时间，用于判断触地
+        self.landing_start = None
+        self.stalled_since = None
         self.delay_queue = deque()
         self.last_cmd_time = None
 
@@ -65,13 +52,13 @@ class TelloSimInterface(Node):
         self.create_subscription(Odometry, '/tello/odom', self.on_odom, 10)
         self.create_service(Trigger, '/tello/takeoff', self.on_takeoff)
         self.create_service(Trigger, '/tello/land', self.on_land)
-        # use_sim_time 下按仿真时间计时：仿真暂停时不会误触发
+
         self.create_timer(0.1, self.on_watchdog)
 
         self.publish_status()
-        self.get_logger().info('Tello 仿真接口就绪：/tello/cmd_vel, /tello/takeoff, /tello/land')
+        self.get_logger().info('Tello interface ready: /tello/cmd_vel, /tello/takeoff, /tello/land')
 
-    # ---------- 工具 ----------
+
 
     def set_state(self, state):
         if state != self.state:
@@ -92,7 +79,7 @@ class TelloSimInterface(Node):
         msg.angular.z = yaw_rate
         self.sim_cmd_pub.publish(msg)
 
-    # ---------- 回调 ----------
+
 
     def on_cmd(self, msg):
         self.last_cmd_time = self.get_clock().now()
@@ -103,7 +90,7 @@ class TelloSimInterface(Node):
         out.linear.y = clamp(msg.linear.y) * self.v_max_xy
         out.linear.z = clamp(msg.linear.z) * self.v_max_z
         out.angular.z = clamp(msg.angular.z) * self.yaw_rate_max
-        # 延迟 delay_steps 条指令再发出，模拟真机 WiFi 延迟
+
         self.delay_queue.append(out)
         if len(self.delay_queue) > self.delay_steps:
             self.sim_cmd_pub.publish(self.delay_queue.popleft())
@@ -111,7 +98,7 @@ class TelloSimInterface(Node):
     def on_odom(self, msg):
         self.odom_received = True
         self.z = msg.pose.pose.position.z
-        self.vz = msg.twist.twist.linear.z  # 机体系，近似水平时就是竖直速度
+        self.vz = msg.twist.twist.linear.z
         now = stamp_to_sec(msg.header.stamp)
 
         if self.state == TAKING_OFF:
@@ -120,7 +107,7 @@ class TelloSimInterface(Node):
                 self.send_velocity()
                 self.set_state(FLYING)
             else:
-                # 接近目标高度时按距离减速，避免冲过头
+
                 self.send_enable(True)
                 self.send_velocity(vz=min(self.takeoff_speed, 1.5 * error))
 
@@ -128,7 +115,7 @@ class TelloSimInterface(Node):
             self.send_velocity(vz=-self.land_speed)
             if self.landing_start is None:
                 self.landing_start = now
-            # 触地判定：下降超过 1 s 后，竖直速度持续 0.3 s 接近 0
+
             if now - self.landing_start > 1.0 and self.vz > -0.05:
                 if self.stalled_since is None:
                     self.stalled_since = now
@@ -141,7 +128,7 @@ class TelloSimInterface(Node):
 
     def on_watchdog(self):
         self.publish_status()
-        # 飞行中太久没收到指令就悬停（松开键盘即停）
+
         if self.state == FLYING and self.last_cmd_time is not None:
             idle = (self.get_clock().now() - self.last_cmd_time).nanoseconds * 1e-9
             if idle > self.cmd_timeout:
@@ -150,14 +137,14 @@ class TelloSimInterface(Node):
 
     def on_takeoff(self, request, response):
         if not self.odom_received:
-            response.success, response.message = False, '还没收到 /tello/odom，仿真是否在运行？'
+            response.success, response.message = False, 'No /tello/odom received yet; is the simulation running?'
         elif self.state != LANDED:
-            response.success, response.message = False, f'当前状态 {self.state}，不能起飞'
+            response.success, response.message = False, f'Cannot take off from state {self.state}'
         else:
             self.target_z = self.z + self.takeoff_height
             self.send_enable(True)
             self.set_state(TAKING_OFF)
-            response.success, response.message = True, f'起飞中，目标高度 {self.target_z:.2f} m'
+            response.success, response.message = True, f'Taking off to target height {self.target_z:.2f} m'
         return response
 
     def on_land(self, request, response):
@@ -165,9 +152,9 @@ class TelloSimInterface(Node):
             self.landing_start = None
             self.stalled_since = None
             self.set_state(LANDING)
-            response.success, response.message = True, '降落中'
+            response.success, response.message = True, 'Landing'
         else:
-            response.success, response.message = False, f'当前状态 {self.state}，不能降落'
+            response.success, response.message = False, f'Cannot land from state {self.state}'
         return response
 
 

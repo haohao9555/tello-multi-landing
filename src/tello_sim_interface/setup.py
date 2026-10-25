@@ -14,7 +14,7 @@ setup(
     zip_safe=True,
     maintainer='haohao9555',
     maintainer_email='243935570+haohao9555@users.noreply.github.com',
-    description='Tello 仿真接口节点',
+    description='Tello simulation interface node',
     license='MIT',
     entry_points={
         'console_scripts': [

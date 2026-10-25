@@ -1,16 +1,4 @@
-"""FPO：Flow Policy Optimization（Berkeley，"Flow Matching Policy Gradients"）。
-
-在 PPO 基础上只换两处：
-  1. 策略是 flow：速度场 v_θ(a_τ, τ; s)，从 ε ~ N(0, σ0²) 出发用 Euler 积分 K 步得到动作
-       a_{k+1} = a_k + v_θ(a_k, k/K; s) / K
-  2. 似然比用条件流匹配（CFM）损失之差代替（CFM 损失 ≈ 负 ELBO）：
-       ℓ_θ(τ, ε) = ‖v_θ(a_τ, τ; s) − (a − ε)‖²,   a_τ = τ·a + (1 − τ)·ε
-       ratio = exp( L_old − L_new ),  L = 对 N 组 (τ, ε) 取平均
-     其余（clip、GAE、critic）和 PPO 完全相同。flow 的熵算不出来，所以没有熵奖励。
-
-Critic / RolloutBuffer / compute_gae 直接复用 ppo.py。
-用法：python -m tello_rl.fpo --env fast --total-steps 300000 --seed 1
-"""
+"""Fpo."""
 import time
 
 import numpy as np
@@ -22,7 +10,7 @@ from tello_rl.common import EpisodeLogger, make_env, mlp, orthogonal_init, parse
 from tello_rl.ppo import Critic, RolloutBuffer, compute_gae
 
 # ==================================
-# FPO Hyperparameters（PPO 部分与 ppo.py 相同）
+
 # ==================================
 FPO_LR = 3e-4
 FPO_ROLLOUT_STEPS = 2048
@@ -31,22 +19,22 @@ FPO_UPDATE_EPOCHS = 10
 FPO_CLIP_EPS = 0.2
 FPO_MAX_GRAD_NORM = 0.5
 
-ODE_STEPS = 10               # 采样动作时的 Euler 积分步数 K
-N_MC = 8                     # 每个动作采样几组 (τ, ε) 来估计 CFM 损失
-SOURCE_STD = 0.6             # 起点噪声 ε 的标准差；初始速度场 ≈ 0 时策略 ≈ N(0, 0.6²)，与 PPO 初始 σ 相同
+ODE_STEPS = 10
+N_MC = 8
+SOURCE_STD = 0.6
 TIME_EMBED_DIM = 16
-LOG_RATIO_CLIP = 5.0         # 数值保护：log ratio 截断到 ±5
+LOG_RATIO_CLIP = 5.0
 
 EVAL_INTERVAL = 50_000
 
 
-# flow actor network：速度场 v_θ(a_τ, τ; s)
+
 class FlowActor(nn.Module):
     def __init__(self, obs_dim, act_dim):
         super().__init__()
         self.act_dim = act_dim
         self.net = mlp(obs_dim + act_dim + TIME_EMBED_DIM, act_dim)
-        orthogonal_init(self.net, 0.01)   # 初始速度场 ≈ 0：动作 ≈ 起点噪声
+        orthogonal_init(self.net, 0.01)
         freqs = torch.arange(1, TIME_EMBED_DIM // 2 + 1, dtype=torch.float32) * np.pi
         self.register_buffer('freqs', freqs)
 
@@ -56,7 +44,7 @@ class FlowActor(nn.Module):
         return self.net(torch.cat([obs.float(), a_tau, emb], dim=-1))
 
     def sample(self, obs, eps):
-        """从起点噪声 eps 积分 K 步得到动作；eps = 0 时是确定性动作（评估用）。"""
+        """Sample."""
         a = eps
         for k in range(ODE_STEPS):
             tau = torch.full(a.shape[:-1], k / ODE_STEPS, device=a.device)
@@ -64,7 +52,7 @@ class FlowActor(nn.Module):
         return a
 
     def cfm_loss(self, obs, action, tau, eps):
-        """obs (B, O)、action (B, A)、tau (B, N)、eps (B, N, A)  ->  每组 (τ, ε) 的损失 (B, N)。"""
+        """Cfm loss."""
         n = tau.shape[1]
         obs_n = obs[:, None].expand(-1, n, -1)
         a_n = action[:, None].expand(-1, n, -1)
@@ -85,11 +73,11 @@ def fpo_update(buffer, actor, critic, actor_optimizer, critic_optimizer, device,
     advantages = (advantages - advantages.mean()) / (advantages.std(unbiased=False) + 1e-8)
     batch_size = len(buffer)
 
-    # 每个动作固定 N 组 (τ, ε)，新旧策略用同一组，保证 L_old − L_new 只反映参数变化
+
     tau = torch.rand(batch_size, N_MC, device=device)
     eps = torch.randn(batch_size, N_MC, actor.act_dim, device=device) * SOURCE_STD
     with torch.no_grad():
-        old_loss = actor.cfm_loss(obs, actions, tau, eps).mean(-1)   # 更新前的参数就是 θ_old
+        old_loss = actor.cfm_loss(obs, actions, tau, eps).mean(-1)
 
     actor_losses, critic_losses, log_ratios = [], [], []
 
@@ -126,7 +114,7 @@ def fpo_update(buffer, actor, critic, actor_optimizer, critic_optimizer, device,
 
 
 def make_policy(checkpoint_path, obs_dim, act_dim, device='cpu'):
-    """评估用的确定性策略：从 ε = 0 积分。"""
+    """Make policy."""
     actor = FlowActor(obs_dim, act_dim).to(device)
     actor.load_state_dict(torch.load(checkpoint_path, map_location=device)['actor'])
     actor.eval()
@@ -144,7 +132,7 @@ def main():
     set_seed(args.seed)
     device = torch.device(args.device)
 
-    env = make_env(args.env)
+    env = make_env(args.env, wind_level=args.wind, constant_wind=args.constant_wind)
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
     act_low, act_high = env.action_space.low, env.action_space.high
@@ -163,7 +151,7 @@ def main():
     start_time = time.time()
 
     for step in range(1, args.total_steps + 1):
-        # 1. Flow 采样动作 + Critic value
+
         obs_tensor = torch.as_tensor(obs, device=device).unsqueeze(0)
         with torch.no_grad():
             eps = torch.randn(1, act_dim, device=device) * SOURCE_STD
@@ -171,7 +159,7 @@ def main():
             value = critic(obs_tensor)
         action = action.squeeze(0).cpu().numpy()
 
-        # 2. Environment step（裁剪后的动作送进环境，buffer 里存裁剪前的值）
+
         next_obs, reward, terminated, truncated, info = env.step(np.clip(action, act_low, act_high))
 
         # 3. Next state value
@@ -181,7 +169,7 @@ def main():
             else:
                 next_value = critic(torch.as_tensor(next_obs, device=device).unsqueeze(0)).item()
 
-        # 4. Store transition（FPO 不需要 log_prob，填 0）
+
         buffer.add(obs, action, reward, 0.0, value.item(), next_value, terminated, truncated)
         logger.step(reward)
 

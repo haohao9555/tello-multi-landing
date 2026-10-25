@@ -1,69 +1,70 @@
-"""四机降落的快速替身环境（4 架一起起飞、逐架降落，规则见 multi_task.py）。
-
-动力学与单机快速环境相同（fast_env.py），4 架飞机吹同一阵风，各自有独立的
-指令延迟、传感器噪声、定位丢帧和动力学参数。
-观测 52 维：每架 12 维 × 4 + 4 个平台是否已占用；动作 12 维：每架 [vx, vy, vz] ∈ [-1, 1]。
-preflight=True 时（评估用）起飞前先测风，超过阈值整组不起飞，回合直接以 no_go 结束。
-"""
+"""Fast four-aircraft landing environment with shared wind and independent observation effects."""
 import gymnasium as gym
 import numpy as np
 
 from tello_rl import multi_task as mt
 from tello_rl import task
-from tello_rl.fast_env import A_MAX, DRAG, KV
 
 N = mt.N_DRONES
 
 
+def drone_observation(i, effects, pos, vel, prev_action, active, targets=mt.TARGETS):
+    """Drone observation."""
+    history = np.atleast_2d(prev_action)
+    if active:
+        o = effects.observe(pos, vel, history[0])
+        return np.concatenate([np.insert(o, 7, [1.0, *(targets[i] - o[0:2])]), history[1:].ravel()])
+    return np.concatenate([pos, np.zeros(3), [1.0, 0.0], targets[i] - pos[:2], np.zeros(history.size)])
+
+
 class FastMultiTelloEnv(gym.Env):
-    def __init__(self, wind_level=None, preflight=False, substeps=10):
+    def __init__(self, wind_level=None, preflight=False, substeps=10, constant_wind=False, v_max_xy=None,
+                 profile='tello'):
+        """Init."""
+        self.profile = mt.get_profile(profile)
+        self.targets = self.profile.targets
         self.wind_level = wind_level
+        self.constant_wind = constant_wind
         self.preflight = preflight
         self.substeps = substeps
-        self.zone_weight = 1.0   # 降落区违规扣分的权重（课程学习时由外部从 0 逐步调到 1）
-        self.observation_space = gym.spaces.Box(-np.inf, np.inf, (mt.OBS_DIM,), np.float32)
+        self.observation_space = gym.spaces.Box(-np.inf, np.inf, (N * self.profile.per_drone_obs,), np.float32)
         self.action_space = gym.spaces.Box(-1.0, 1.0, (mt.ACT_DIM,), np.float32)
-        self.v_max = np.array([task.V_MAX_XY, task.V_MAX_XY, task.V_MAX_Z])
+        self.v_max_xy = self.profile.v_max_xy if v_max_xy is None else v_max_xy
+        self.v_max = np.array([self.v_max_xy, self.v_max_xy, self.profile.v_max_z])
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        rng = self.np_random
-        self.pos = mt.sample_starts(rng)
+        rng, p = self.np_random, self.profile
+        self.pos = mt.sample_starts(rng, p)
         self.vel = np.zeros((N, 3))
-        self.prev_action = np.zeros((N, 3))
-        self.wind = task.WindModel(rng, self.wind_level)
-        self.go, self.measured_wind = mt.preflight_go(self.wind, rng) if self.preflight else (True, None)
+        self.history = np.zeros((N, p.action_history, 3))
+        self.wind = task.WindModel(rng, self.wind_level, self.constant_wind)
+        self.go, self.measured_wind = mt.preflight_go(self.wind, rng, p) if self.preflight else (True, None)
         self.effects = [task.RealismEffects(rng) for _ in range(N)]
         if task.RANDOMIZE_DYNAMICS:
-            self.kv = rng.uniform(*task.KV_RANGE, size=N)
-            self.drag = rng.uniform(*task.DRAG_RANGE, size=N)
+            self.kv = rng.uniform(*p.kv_range, size=N)
+            self.drag = rng.uniform(*p.drag_range, size=N)
             self.cmd_gain = rng.uniform(*task.CMD_GAIN_RANGE, size=N)
+            self.drag2 = rng.uniform(*p.drag2_range, size=N) if p.drag2_range[1] > 0 else np.zeros(N)
         else:
-            self.kv, self.drag, self.cmd_gain = np.full(N, KV), np.full(N, DRAG), np.ones(N)
+            self.kv, self.drag, self.cmd_gain = np.full(N, p.kv), np.full(N, p.drag), np.ones(N)
+            self.drag2 = np.full(N, p.drag2)
         self.active = np.ones(N, dtype=bool)
-        self.occupied = np.zeros(N, dtype=bool)
         self.outcomes = [None] * N
         self.landing_errors = [None] * N
         self.touchdown_speeds = [None] * N
-        self.min_sep = np.inf
         self.touchdown_times = [None] * N
-        self.zone_violation_steps = 0
-        self.cleared = None   # 获准降落的飞机编号
+        self.min_sep = np.inf
+        self.drone_rewards = np.zeros(N)
         self.steps = 0
         info = {'wind': self.wind.mean, 'go': self.go, 'measured_wind': self.measured_wind}
         return self._observe(), info
 
     def _observe(self):
-        parts = []
-        for i in range(N):
-            if self.active[i]:
-                o = self.effects[i].observe(self.pos[i], self.vel[i], self.prev_action[i])
-                o = np.insert(o, 7, [1.0, float(mt.in_zone(self.pos[i])[0])])   # [pos 3, vel 3, valid, active, in_zone, prev 3]
-            else:
-                o = np.concatenate([self.pos[i], np.zeros(3), [1.0, 0.0, 0.0], np.zeros(3)])
-            parts.append(o)
-        parts.append(self.occupied.astype(np.float64))
-        return np.concatenate(parts).astype(np.float32)
+        return np.concatenate([
+            drone_observation(i, self.effects[i], self.pos[i], self.vel[i], self.history[i], self.active[i],
+                              self.targets)
+            for i in range(N)]).astype(np.float32)
 
     def _finish(self, reason):
         for i in range(N):
@@ -71,13 +72,10 @@ class FastMultiTelloEnv(gym.Env):
                 self.outcomes[i] = reason
         n_success = sum(o == 'success' for o in self.outcomes)
         errors = [e for e in self.landing_errors if e is not None]
-        times = sorted(t for t in self.touchdown_times if t is not None)
         return {'outcomes': list(self.outcomes), 'n_success': n_success,
-                'all_landed': n_success == N,
-                'all_success': n_success == N and self.zone_violation_steps == 0,
-                'zone_violation_steps': self.zone_violation_steps,
+                'all_success': n_success == N,
+                'n_collisions': sum(o == 'collision' for o in self.outcomes),
                 'touchdown_times': list(self.touchdown_times),
-                'min_landing_gap': float(np.min(np.diff(times))) if len(times) > 1 else None,
                 'min_sep': float(self.min_sep),
                 'time': self.steps * task.CONTROL_DT, 'go': self.go,
                 'landing_error': float(np.mean(errors)) if errors else None,
@@ -85,13 +83,14 @@ class FastMultiTelloEnv(gym.Env):
                 if errors else None}
 
     def step(self, action):
-        if not self.go:   # 大风不起飞：回合直接结束
+        if not self.go:
+            self.drone_rewards = np.zeros(N)
             return self._observe(), 0.0, True, False, self._finish('no_go')
 
+        p = self.profile
         action = np.clip(np.asarray(action, dtype=np.float64).reshape(N, 3), -1.0, 1.0)
         was_active = self.active.copy()
-        occupied_before = self.occupied.copy()
-        cost_before = mt.assignment_cost(self.pos, was_active, occupied_before, self.cleared)
+        cost_before = mt.target_costs(self.pos, p)
 
         v_cmd = np.zeros((N, 3))
         for i in np.flatnonzero(was_active):
@@ -100,35 +99,35 @@ class FastMultiTelloEnv(gym.Env):
         h = task.CONTROL_DT / self.substeps
         flying = was_active.copy()
         for _ in range(self.substeps):
-            acc = np.clip(self.kv[:, None] * (v_cmd - self.vel), -A_MAX, A_MAX)
-            acc[:, :2] -= self.drag[:, None] * (self.vel[:, :2] - wind)
+            acc = np.clip(self.kv[:, None] * (v_cmd - self.vel), -p.a_max, p.a_max)
+            v_rel = self.vel[:, :2] - wind
+            acc[:, :2] -= (self.drag + self.drag2 * np.linalg.norm(v_rel, axis=1))[:, None] * v_rel
             self.vel[flying] += acc[flying] * h
             self.pos[flying] += self.vel[flying] * h
             flying &= self.pos[:, 2] > 0.0
         self.steps += 1
 
-        reward = -task.TIME_PENALTY * was_active.sum()
-        reward -= task.SMOOTH_PENALTY * float(np.sum((action - self.prev_action)[was_active] ** 2))
+        rewards = np.zeros(N)
+        rewards[was_active] -= task.TIME_PENALTY
+        rewards[was_active] -= task.SMOOTH_PENALTY * np.sum((action - self.history[:, 0])[was_active] ** 2, axis=1)
 
-        # 触地
+
         for i in np.flatnonzero(was_active & (self.pos[:, 2] <= 0.0)):
-            outcome, pad, r, err = mt.check_touchdown(self.pos[i, :2], self.vel[i, 2], self.occupied)
-            reward += r
+            outcome, r, err = mt.check_touchdown(i, self.pos[i, :2], self.vel[i, 2], p)
+            rewards[i] += r
             self.outcomes[i], self.landing_errors[i] = outcome, err
             self.touchdown_times[i] = self.steps * task.CONTROL_DT
             self.touchdown_speeds[i] = abs(float(self.vel[i, 2]))
-            if pad is not None:
-                self.occupied[pad] = True
             self.active[i] = False
             self.pos[i, 2], self.vel[i] = 0.0, 0.0
 
-        # 出界
+
         for i in np.flatnonzero(self.active):
-            if np.abs(self.pos[i, :2]).max() > mt.BOUNDS_XY or self.pos[i, 2] > mt.BOUNDS_Z:
-                reward -= task.FAIL_PENALTY
+            if np.abs(self.pos[i, :2]).max() > p.bounds_xy or self.pos[i, 2] > p.bounds_z:
+                rewards[i] -= task.FAIL_PENALTY
                 self.outcomes[i], self.active[i] = 'out_of_bounds', False
 
-        # 相撞（在飞的飞机之间，以及在飞的飞机撞到已落地的飞机）与安全距离
+
         for i in range(N):
             for j in range(i + 1, N):
                 if not (was_active[i] or was_active[j]):
@@ -136,28 +135,24 @@ class FastMultiTelloEnv(gym.Env):
                 d = float(np.linalg.norm(self.pos[i] - self.pos[j]))
                 if was_active[i] and was_active[j]:
                     self.min_sep = min(self.min_sep, d)
-                    if d < mt.SAFE_DIST:
-                        reward -= mt.PROXIMITY_PENALTY * min(
-                            (mt.SAFE_DIST - d) / (mt.SAFE_DIST - mt.COLLISION_DIST), 1.0)
-                if d < mt.COLLISION_DIST:
+                    if d < p.safe_dist:
+                        penalty = mt.PROXIMITY_PENALTY * min(
+                            (p.safe_dist - d) / (p.safe_dist - p.collision_dist), 1.0)
+                        rewards[[i, j]] -= penalty / 2
+                if d < p.collision_dist:
                     for k in (i, j):
                         if self.active[k]:
-                            reward -= task.FAIL_PENALTY
+                            rewards[k] -= task.FAIL_PENALTY
                             self.outcomes[k], self.active[k] = 'collision', False
 
-        # 降落区一次只允许一架：这一步在飞（含刚落地）的飞机里，区内多出来的每架扣分
-        in_zone_count = int(np.sum(was_active & mt.in_zone(self.pos)))
-        if in_zone_count > 1:
-            reward -= mt.ZONE_PENALTY * self.zone_weight * (in_zone_count - 1)
-            self.zone_violation_steps += 1
 
-        # 引导：上一步在飞的飞机，按最优分配算总距离的减少量（坠毁的飞机不会因此"得分"）
-        self.cleared = mt.update_clearance(self.cleared, self.pos, was_active)
-        cost_after = mt.assignment_cost(self.pos, was_active, occupied_before, self.cleared)
-        reward += task.SHAPING * (cost_before - cost_after)
+        cost_after = mt.target_costs(self.pos, p)
+        rewards[was_active] += task.SHAPING * (cost_before - cost_after)[was_active]
+        self.drone_rewards = rewards
 
-        self.prev_action[was_active] = action[was_active]
+        self.history[was_active] = np.concatenate(
+            [action[was_active, None], self.history[was_active, :-1]], axis=1)
         terminated = not self.active.any()
-        truncated = not terminated and self.steps >= mt.MAX_STEPS
+        truncated = not terminated and self.steps >= p.max_steps
         info = self._finish('timeout') if (terminated or truncated) else {}
-        return self._observe(), reward, terminated, truncated, info
+        return self._observe(), float(rewards.sum()), terminated, truncated, info

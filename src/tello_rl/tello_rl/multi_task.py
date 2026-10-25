@@ -1,124 +1,148 @@
-"""四机降落任务：4 架 Tello 一起起飞，从北、东、南、西飞来，逐架降落到 4 个分开的平台上（动态分配）。
-
-坐标原点是降落站中心。平台在 (±PAD_OFFSET, ±PAD_OFFSET)，彼此之间留有空隙。
-飞机落哪个平台、按什么顺序降落都不预先指定：成功的条件是落在一个空平台上；落到已被占用的平台算失败。
-不能一起降落：降落区（站中心 ZONE_RADIUS 以内、ZONE_HEIGHT 以下）同一时刻只允许一架在飞的飞机，
-其余在区外等待；多出来的每架每步扣 ZONE_PENALTY，评估时出现过违规的回合不算成功。
-引导奖励用"当前最优分配"下的总距离（对所有分配方式取最小），不偏向任何一种分配；
-高度上只引导获准降落的那架往下降，其余在平台上方 HOLD_Z 等待（和"一次只进一架"的规则一致）。
-风、指令延迟、传感器噪声、定位丢帧沿用单机任务（task.py）。
-"""
-from itertools import permutations
+"""Four-aircraft profiles, fixed pad assignments and landing outcome checks."""
+from dataclasses import dataclass
 
 import numpy as np
 
 from tello_rl import task
 
 N_DRONES = 4
-PAD_OFFSET = 0.5            # 平台中心 (±0.5, ±0.5)：中心间距 1 m，0.4 m 的平台之间留 0.6 m 空隙
+PAD_OFFSET = 0.5
 PADS = np.array([[PAD_OFFSET, PAD_OFFSET], [-PAD_OFFSET, PAD_OFFSET],
                  [-PAD_OFFSET, -PAD_OFFSET], [PAD_OFFSET, -PAD_OFFSET]])
-DIRECTIONS = np.deg2rad([90.0, 0.0, 270.0, 180.0])   # 北、东、南、西
+DIRECTIONS = np.deg2rad([90.0, 0.0, 270.0, 180.0])
+ASSIGNED_PAD = np.array([0, 3, 2, 1])
+TARGETS = PADS[ASSIGNED_PAD]
 
-START_RADIUS = (2.0, 2.5)   # 起点离站中心的距离 m
-START_LATERAL = 0.3         # 起点横向偏移 ±m
-START_Z = (1.0, 1.5)        # 起飞后悬停高度 m
+START_RADIUS = (2.0, 2.5)
+START_LATERAL = 0.3
+START_Z = (1.0, 1.5)
 BOUNDS_XY = 3.5
 BOUNDS_Z = 3.0
-MAX_STEPS = 500             # 50 s（逐架降落需要排队）
+MAX_STEPS = 400             # 40 s
 
-ZONE_RADIUS = 1.2           # 降落区：站中心 1.2 m 以内（4 块平台最远角约 0.99 m）
-ZONE_HEIGHT = 0.8           # 且高度 0.8 m 以下
-ZONE_PENALTY = 1.0          # 降落区里每多一架在飞的飞机，每步扣分
-HOLD_Z = 1.0                # 没获准降落的飞机在自己平台上方这个高度等待（高于降落区上限）
+COLLISION_DIST = 0.25
+SAFE_DIST = 0.5
+PROXIMITY_PENALTY = 0.1
 
-COLLISION_DIST = 0.25       # 两机中心距离小于它算相撞（Tello 加保护罩约 0.2 m）
-SAFE_DIST = 0.5             # 小于安全距离开始按距离扣分
-PROXIMITY_PENALTY = 0.1     # 每对飞机每步最多扣这么多
 
-# 大风不起飞：起飞前测 10 s 平均风速，超过阈值整组不起飞
-GO_THRESHOLD = 3.5          # m/s（训练风速 0~3 m/s，留一点余量）
+GO_THRESHOLD = 3.5
 PREFLIGHT_SECONDS = 10.0
-ANEMOMETER_NOISE = 0.2      # 风速计测量误差 σ (m/s)
+ANEMOMETER_NOISE = 0.2
 
-PER_DRONE_OBS = 12          # [x, y, z, vx, vy, vz, 位置是否有效, 是否在飞, 是否在降落区, 上一步指令 ×3]
-OBS_DIM = N_DRONES * PER_DRONE_OBS + N_DRONES   # + 4 个平台是否已占用
+PER_DRONE_OBS = 13
+OBS_DIM = N_DRONES * PER_DRONE_OBS
 ACT_DIM = N_DRONES * task.ACT_DIM
 
 
-def sample_starts(rng):
-    """每架飞机从自己的方向飞来：离站中心 2~2.5 m，横向偏移 ±0.3 m，高 1~1.5 m。"""
+@dataclass(frozen=True)
+class Profile:
+    """Profile."""
+    name: str
+    pad_offset: float
+    pad_radius: float
+    max_touchdown_speed: float
+    start_radius: tuple
+    start_lateral: float
+    start_z: tuple
+    bounds_xy: float
+    bounds_z: float
+    max_steps: int
+    collision_dist: float
+    safe_dist: float
+    go_threshold: float
+    anemometer_noise: float
+    max_wind: float
+    wind_levels: tuple
+    v_max_xy: float
+    v_max_z: float
+    a_max: float
+    kv: float
+    kv_range: tuple
+    drag: float
+    drag_range: tuple
+    drag2: float
+    drag2_range: tuple
+    length_scale: float
+    action_history: int = 1
+
+    @property
+    def per_drone_obs(self):
+        return 10 + 3 * self.action_history
+
+    @property
+    def pads(self):
+        o = self.pad_offset
+        return np.array([[o, o], [-o, o], [-o, -o], [o, -o]])
+
+    @property
+    def targets(self):
+        return self.pads[ASSIGNED_PAD]
+
+
+TELLO = Profile(
+    name='tello', pad_offset=PAD_OFFSET, pad_radius=task.PAD_RADIUS, max_touchdown_speed=task.MAX_TOUCHDOWN_SPEED,
+    start_radius=START_RADIUS, start_lateral=START_LATERAL, start_z=START_Z, bounds_xy=BOUNDS_XY,
+    bounds_z=BOUNDS_Z, max_steps=MAX_STEPS, collision_dist=COLLISION_DIST, safe_dist=SAFE_DIST,
+    go_threshold=GO_THRESHOLD, anemometer_noise=ANEMOMETER_NOISE, max_wind=task.MAX_WIND,
+    wind_levels=task.WIND_LEVELS,
+    v_max_xy=task.V_MAX_XY, v_max_z=task.V_MAX_Z, a_max=3.0, kv=2.5, kv_range=task.KV_RANGE,
+    drag=0.41, drag_range=task.DRAG_RANGE, drag2=0.0, drag2_range=(0.0, 0.0), length_scale=1.0)
+
+
+
+M30 = Profile(
+    name='m30', pad_offset=2.0, pad_radius=0.3, max_touchdown_speed=0.5,
+    start_radius=(20.0, 25.0), start_lateral=3.0, start_z=(8.0, 12.0), bounds_xy=35.0,
+    bounds_z=25.0, max_steps=600, collision_dist=0.9, safe_dist=1.8,
+    go_threshold=15.0, anemometer_noise=0.5, max_wind=15.0, wind_levels=(0.0, 5.0, 10.0, 15.0),
+    v_max_xy=23.0, v_max_z=5.0, a_max=7.0, kv=1.5, kv_range=(1.1, 1.9),
+    drag=0.12, drag_range=(0.10, 0.14), drag2=0.017, drag2_range=(0.014, 0.020), length_scale=10.0,
+    action_history=2)
+
+PROFILES = {'tello': TELLO, 'm30': M30}
+
+
+def get_profile(profile):
+    return profile if isinstance(profile, Profile) else PROFILES[profile or 'tello']
+
+
+def sample_starts(rng, profile=TELLO):
+    """Sample starts."""
+    p = profile
     starts = np.zeros((N_DRONES, 3))
     for i, theta in enumerate(DIRECTIONS):
         radial = np.array([np.cos(theta), np.sin(theta)])
         lateral = np.array([-radial[1], radial[0]])
-        starts[i, :2] = (rng.uniform(*START_RADIUS) * radial
-                         + rng.uniform(-START_LATERAL, START_LATERAL) * lateral)
-        starts[i, 2] = rng.uniform(*START_Z)
+        starts[i, :2] = (rng.uniform(*p.start_radius) * radial
+                         + rng.uniform(-p.start_lateral, p.start_lateral) * lateral)
+        starts[i, 2] = rng.uniform(*p.start_z)
     return starts
 
 
-def preflight_go(wind_model, rng):
-    """起飞前测风：用一份独立的风模型副本模拟 10 s 测量，平均风速 + 测量噪声与阈值比较。"""
+def preflight_go(wind_model, rng, profile=TELLO):
+    """Preflight go."""
     probe = task.WindModel(np.random.default_rng(rng.integers(2 ** 31)), wind_model.speed)
     probe.direction = wind_model.direction
     n = int(PREFLIGHT_SECONDS / task.CONTROL_DT)
     measured = np.mean([np.linalg.norm(probe.step(task.CONTROL_DT)) for _ in range(n)])
-    measured += rng.normal(0.0, ANEMOMETER_NOISE)
-    return measured <= GO_THRESHOLD, measured
+    measured += rng.normal(0.0, profile.anemometer_noise)
+    return measured <= profile.go_threshold, measured
 
 
-def in_zone(pos):
-    """每架飞机是否在降落区里（只看位置，是否在飞由调用方判断）。"""
-    pos = np.atleast_2d(pos)
-    return (np.linalg.norm(pos[:, :2], axis=1) <= ZONE_RADIUS) & (pos[:, 2] <= ZONE_HEIGHT)
+def target_costs(pos, profile=TELLO):
+    """Target costs."""
+    d = np.linalg.norm(pos[:, :2] - profile.targets, axis=1) + 0.5 * np.maximum(pos[:, 2], 0.0)
+    return d / profile.length_scale
 
 
-def update_clearance(cleared, pos, active):
-    """获准降落的飞机：第一个进入降落区的那架；它落地、出事或离开降落区后，下一架进入的才获准。"""
-    inside = active & in_zone(pos)
-    if cleared is not None and inside[cleared]:
-        return cleared
-    candidates = np.flatnonzero(inside)
-    return int(candidates[np.argmin(pos[candidates, 2])]) if len(candidates) else None
-
-
-def height_cost(z, is_cleared):
-    """获准的飞机被引导降到平台面；其余在 HOLD_Z 等待。两者在降落区上限处相等，进区时引导项不跳变。"""
-    z = max(z, 0.0)
-    if is_cleared:
-        return 0.5 * z - 0.5 * ZONE_HEIGHT + 0.5 * abs(ZONE_HEIGHT - HOLD_Z)
-    return 0.5 * abs(z - HOLD_Z)
-
-
-def assignment_cost(pos, active, occupied, cleared=None):
-    """在飞的飞机分配到空平台的最小总代价：Σ 水平距离 + Σ 高度项（见 height_cost）。"""
-    drones = np.flatnonzero(active)
-    free = np.flatnonzero(~occupied)
-    if len(drones) == 0:
-        return 0.0
-    dist = np.linalg.norm(pos[drones, None, :2] - PADS[None, free], axis=-1)
-    height = np.array([height_cost(pos[i, 2], i == cleared) for i in drones])
-    best = min(sum(dist[i, j] for i, j in enumerate(perm))
-               for perm in permutations(range(len(free)), len(drones)))
-    return best + height.sum()
-
-
-def nearest_pad(xy):
-    d = np.linalg.norm(PADS - xy, axis=1)
-    k = int(np.argmin(d))
-    return k, float(d[k])
-
-
-def check_touchdown(xy, vz, occupied):
-    """一架飞机触地时的结果。返回 (outcome, 平台编号或 None, 奖励, 着陆误差)。"""
-    k, d = nearest_pad(xy)
+def check_touchdown(i, xy, vz, profile=TELLO):
+    """Check touchdown."""
+    p = profile
+    d = float(np.linalg.norm(xy - p.targets[i]))
     speed = abs(float(vz))
-    if d <= task.PAD_RADIUS:
-        if occupied[k]:
-            return 'occupied', None, -task.FAIL_PENALTY, d
-        if speed <= task.MAX_TOUCHDOWN_SPEED:
-            return 'success', k, task.SUCCESS_BONUS + task.PRECISION_BONUS * (1 - d / task.PAD_RADIUS), d
-        return 'hard_landing', None, -task.HARD_LANDING_PENALTY, d
+    if d <= p.pad_radius:
+        if speed <= p.max_touchdown_speed:
+            return 'success', task.SUCCESS_BONUS + task.PRECISION_BONUS * (1 - d / p.pad_radius), d
+        return 'hard_landing', -task.HARD_LANDING_PENALTY, d
     lo, hi = task.MISS_PENALTY
-    return 'missed', None, -(lo + (hi - lo) * min((d - task.PAD_RADIUS) / 0.5, 1.0)), d
+    return 'missed', -(lo + (hi - lo) * min((d - p.pad_radius) / (0.5 * p.length_scale), 1.0)), d

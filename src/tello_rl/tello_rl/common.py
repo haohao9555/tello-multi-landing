@@ -1,4 +1,4 @@
-"""三个算法共用的工具：建环境、MLP、命令行参数、保存目录、训练日志。"""
+"""Common."""
 import argparse
 import os
 import random
@@ -9,25 +9,25 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-RUNS_DIR = Path(__file__).resolve().parents[3] / 'runs'   # /workspace/tello_ws/runs
+RUNS_DIR = Path(__file__).resolve().parents[3] / 'runs'
 HIDDEN = 128
 
 
-def make_env(env_id, wind_level=None):
-    """fast：单机快速环境；multi：四机快速环境；gazebo：Gazebo 环境；其他：任意 Gymnasium 环境 id。"""
+def make_env(env_id, wind_level=None, constant_wind=False):
+    """Make env."""
     if env_id == 'fast':
         from tello_rl.fast_env import FastTelloLandEnv
-        return FastTelloLandEnv(wind_level=wind_level)
+        return FastTelloLandEnv(wind_level=wind_level, constant_wind=constant_wind)
     if env_id == 'multi':
         from tello_rl.multi_env import FastMultiTelloEnv
-        return FastMultiTelloEnv(wind_level=wind_level)
+        return FastMultiTelloEnv(wind_level=wind_level, constant_wind=constant_wind)
     if env_id == 'gazebo':
-        raise NotImplementedError('Gazebo 环境在 Step 3 接入')
+        raise NotImplementedError('Gazebo environment is available through the simulation module')
     return gym.make(env_id)
 
 
 def mlp(in_dim, out_dim, hidden=HIDDEN):
-    """和 CARTPOLE 里一样的结构：两层 128 + SiLU。"""
+    """Mlp."""
     return nn.Sequential(
         nn.Linear(in_dim, hidden), nn.SiLU(),
         nn.Linear(hidden, hidden), nn.SiLU(),
@@ -36,7 +36,7 @@ def mlp(in_dim, out_dim, hidden=HIDDEN):
 
 
 def orthogonal_init(net, last_gain):
-    """和 Atari 版一样的正交初始化；最后一层用单独的 gain。"""
+    """Orthogonal init."""
     linears = [m for m in net.modules() if isinstance(m, nn.Linear)]
     for m in linears:
         nn.init.orthogonal_(m.weight, np.sqrt(2))
@@ -45,14 +45,20 @@ def orthogonal_init(net, last_gain):
 
 
 def parse_args(algo, default_steps):
-    parser = argparse.ArgumentParser(description=f'{algo.upper()} 训练')
-    parser.add_argument('--env', default='fast', help='fast / gazebo / 任意 Gymnasium 环境 id')
+    parser = argparse.ArgumentParser(description=f'{algo.upper()} training')
+    parser.add_argument('--env', default='fast', help='fast, gazebo, or any Gymnasium environment ID')
     parser.add_argument('--total-steps', type=int, default=default_steps)
     parser.add_argument('--seed', type=int, default=25965245)
-    parser.add_argument('--device', default='cpu', help='小 MLP + 单环境用 CPU 更快')
-    parser.add_argument('--tag', default='gust', help='实验名，区分不同设置')
+    parser.add_argument('--device', default='cpu', help='CPU is recommended for a small MLP and a single environment')
+    parser.add_argument('--tag', default='gust', help='Experiment name used to distinguish configurations')
+    parser.add_argument('--wind', type=float, default=None, help='Fixed mean wind in m/s; otherwise sample between 0 and 3 each episode')
+    parser.add_argument('--wind-type', choices=['gusty', 'constant'], default='gusty',
+                        help='gusty: turbulence, gusts and direction drift; constant: fixed wind')
     args = parser.parse_args()
-    args.save_dir = RUNS_DIR / f'{algo}_{args.env}_{args.tag}_s{args.seed}'
+    args.constant_wind = args.wind_type == 'constant'
+    wind = 'wrand' if args.wind is None else f'w{args.wind:g}'
+    wind += '_const' if args.constant_wind else ''
+    args.save_dir = RUNS_DIR / f'{algo}_{args.env}_{args.tag}_{wind}_s{args.seed}'
     os.makedirs(args.save_dir, exist_ok=True)
     return args
 
@@ -61,11 +67,11 @@ def set_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.set_num_threads(1)   # 多个训练进程并行时互不抢 CPU
+    torch.set_num_threads(1)
 
 
 class EpisodeLogger:
-    """记录每个训练回合：(step, return, length, success, landing_error)，并定期打印。"""
+    """Episodelogger."""
 
     def __init__(self):
         self.episode_log = []
@@ -76,7 +82,7 @@ class EpisodeLogger:
         self.ep_len += 1
 
     def end_episode(self, step, info):
-        if 'all_success' in info:   # 四机：4 架都成功才算
+        if 'all_success' in info:
             success = float(info['all_success'])
         else:
             success = float(info.get('outcome') == 'success')

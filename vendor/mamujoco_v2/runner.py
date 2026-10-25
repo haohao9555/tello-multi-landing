@@ -1,10 +1,4 @@
-"""Runner：把环境、算法、评估、日志和 checkpoint 串起来。
-
-    while 步数 < total_env_steps:
-        batch = collect()              # 并行环境各跑一条完整 episode
-        metrics = algorithm.update(batch)
-        按间隔：写 train 日志 / evaluate() / 存 checkpoint
-"""
+"""Episode collection, evaluation, logging and checkpoint management."""
 
 from datetime import datetime, timezone
 import json
@@ -26,11 +20,11 @@ class Runner:
         self.environment = environment
         self.device = torch.device(config["device"])
 
-    # ---------- 采样与评估 ----------
+
 
     @torch.no_grad()
     def collect(self, evaluation=False, reset_seed=None):
-        """当前策略在 num_envs 个并行环境中各跑一条完整 episode。"""
+        """Collect."""
         environment, algorithm = self.environment, self.algorithm
         spec = environment.spec
         tensor = lambda value, dtype=torch.float32: torch.as_tensor(value, device=self.device, dtype=dtype)
@@ -42,8 +36,8 @@ class Runner:
         active = torch.ones(batch_size, 1, dtype=torch.bool, device=self.device)
         action_mask = algorithm.actor.action_mask.unsqueeze(0)
         settings = self.config["evaluation"]
-        sample_latent = not evaluation or settings["sample_flow_noise"]     # latent 接口项（MAPPO / HAPPO / MAT 不使用）
-        sample_noise = not evaluation or settings["sample_action_noise"]    # 终端高斯噪声 n；评估默认不加
+        sample_latent = not evaluation or settings["sample_flow_noise"]
+        sample_noise = not evaluation or settings["sample_action_noise"]
         per_step = self.config.get("flow", {}).get("latent_resample", "step") == "step"
 
         rows = {name: [] for name in RolloutBatch.field_names()}
@@ -69,15 +63,15 @@ class Runner:
             rows["observations"].append(observations)
             rows["states"].append(states)
             active = active & ~(terminated | truncated)
-            if not active.any():                    # 全部 episode 都已结束：后面只会是 padding，不再空跑到 episode_limit
+            if not active.any():
                 break
         if active.any():
-            raise RuntimeError("环境在 episode_limit 后仍未 terminated/truncated")
+            raise RuntimeError("Environment did not terminate or truncate at episode_limit")
         return RolloutBatch.stack(rows)
 
     @torch.no_grad()
     def evaluate(self):
-        """固定环境 seed、独立随机数作用域，避免定期评估扰动训练。返回值为各 agent 奖励之和（team 回报 × N）。"""
+        """Evaluate."""
         seed, episodes = self.config["seed"], self.config["evaluation"]["episodes"]
         devices = [self.device.index or 0] if self.device.type == "cuda" else []
         batches = []
@@ -92,7 +86,7 @@ class Runner:
             self.algorithm.train(True)
         return {**episode_statistics(RolloutBatch.concatenate(batches, limit=episodes)), "episodes": episodes}
 
-    # ---------- 训练主循环 ----------
+
 
     def run(self, resumed_from=None):
         config, algorithm = self.config, self.algorithm
@@ -134,10 +128,10 @@ class Runner:
         if last_evaluated != algorithm.total_steps:
             log(metrics_path, "evaluate", algorithm.total_steps, self.evaluate())
         self.save(directory / "latest.pt")
-        print(f"完成。checkpoint: {directory / 'latest.pt'}", flush=True)
+        print(f"Finished. Checkpoint: {directory / 'latest.pt'}", flush=True)
 
     def make_run_directory(self, resumed_from):
-        """results/<算法>/<实验名>/seed_<seed>/<UTC 时间戳>/，写入本次的完整配置。"""
+        """Make run directory."""
         config = self.config
         root = Path(config["output"]["directory"]).expanduser()
         if not root.is_absolute():
@@ -175,7 +169,7 @@ class Runner:
 
 
 def episode_statistics(batch):
-    """每条 episode 的回报（各 agent 奖励之和）与长度。"""
+    """Episode statistics."""
     returns = (batch.rewards * batch.filled).sum(dim=1).squeeze(-1)
     return {
         "return_mean": returns.mean().item(),

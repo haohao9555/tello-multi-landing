@@ -1,9 +1,4 @@
-"""MAT（Wen et al. NeurIPS 2022）：Transformer encoder + 按 agent 顺序自回归 decoder 的 actor + 公共 centralized critic + PPO-clip。
-
-执行时 agent i 看到 agent 1..i-1 已采样的动作（集中式、顺序解码）。
-PPO 重算用 teacher forcing，log p 为逐 agent 条件高斯。
-一次 update：奖励归一化 -> 每个 epoch [GAE 目标 -> critic 回归一步 -> 打乱后按 minibatch 做 PPO-clip] -> 收尾。
-"""
+"""Mat."""
 
 import torch
 from torch import nn
@@ -52,7 +47,7 @@ class MAT:
         raw = batch.raw_actions.flatten(0, 1)
         old_log_probs = batch.log_probs.flatten(0, 1)
         evaluate = lambda indices: self.actor.evaluate_actions(batch.inputs, raw, indices, training["bptt_steps"])
-        with torch.no_grad():   # 采样时与重算的 log p 应一致，误差应为 0
+        with torch.no_grad():
             record("initial_ratio_error", (evaluate(valid_indices)["log_probs"] - old_log_probs[valid_indices]).expm1().abs().max())
 
         fixed_targets = self.critic.gae(batch, rewards, use_target=False) if training["gae_value"] == "online" else None
@@ -74,7 +69,7 @@ class MAT:
                 policy_loss = -torch.minimum(ratio * advantage, clipped * advantage).mean()
                 actor_loss = policy_loss - training["entropy_coef"] * current["entropy"].sum()
                 if not torch.isfinite(actor_loss):
-                    raise FloatingPointError("actor loss 非有限；请检查 sigma 和学习率")
+                    raise FloatingPointError("Non-finite actor loss; check sigma and learning rate")
                 self.actor_optimizer.zero_grad(set_to_none=True)
                 actor_loss.backward()
                 actor_grad = nn.utils.clip_grad_norm_(self.actor.parameters(), training["grad_norm_clip"], error_if_nonfinite=True)

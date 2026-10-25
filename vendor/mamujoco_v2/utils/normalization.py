@@ -1,4 +1,4 @@
-"""运行时归一化：观测、centralized state、奖励和回报各自维护一份 running mean/std。"""
+"""Running statistics for observations, global state, rewards and value targets."""
 
 import torch
 from torch import nn
@@ -35,7 +35,7 @@ class RunningMeanStd(nn.Module):
 
 
 class Normalizers(nn.Module):
-    """obs / state 归一化后截断到 ±observation_clip；rewards / returns 只缩放，供 PPO 更新使用。"""
+    """Normalizers."""
 
     def __init__(self, env_info, config, device):
         super().__init__()
@@ -58,7 +58,7 @@ class Normalizers(nn.Module):
         return ((values - statistics.mean) / (statistics.var + 1e-8).sqrt()).clamp(-bound, bound)
 
     def actor_inputs(self, observations, use_agent_id):
-        """actor 输入：归一化观测 + 可选 agent one-hot。observations [...,N,O]。"""
+        """Actor inputs."""
         inputs = [self.normalize_observations(observations)]
         if use_agent_id:
             n_agents = observations.shape[-2]
@@ -67,7 +67,7 @@ class Normalizers(nn.Module):
         return torch.cat(inputs, dim=-1)
 
     def normalize_rewards(self, batch):
-        """更新奖励统计并缩放；padding 位置置 0。返回 [B,T,1]。"""
+        """Normalize rewards."""
         rewards = batch.rewards
         if self.settings["rewards"]:
             self.rewards.update(rewards[batch.filled.squeeze(-1).bool()])

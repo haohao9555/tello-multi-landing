@@ -1,0 +1,167 @@
+[
+  {
+    "aircraft": "m30",
+    "algorithm": "MAPPO",
+    "episodes": 100,
+    "target_stage_steps": 1500000,
+    "wind": 0.0,
+    "no_go_rate": 0.0,
+    "all_success": 0.98,
+    "drone_success": 0.995,
+    "collision_rate": 0.0,
+    "collided_drones": 0.0,
+    "min_sep": 3.610267459987272,
+    "landing_spread": 4.213,
+    "landing_error": 0.08242311496243651,
+    "time": 17.233673469387757,
+    "outcomes": {
+      "success": 398,
+      "missed": 2
+    }
+  },
+  {
+    "aircraft": "m30",
+    "algorithm": "PPO (IPPO)",
+    "episodes": 100,
+    "target_stage_steps": 1500000,
+    "wind": 0.0,
+    "no_go_rate": 0.0,
+    "all_success": 0.98,
+    "drone_success": 0.995,
+    "collision_rate": 0.0,
+    "collided_drones": 0.0,
+    "min_sep": 3.084297939462206,
+    "landing_spread": 4.081,
+    "landing_error": 0.06144936399484607,
+    "time": 15.951020408163266,
+    "outcomes": {
+      "success": 398,
+      "hard_landing": 2
+    }
+  },
+  {
+    "aircraft": "m30",
+    "algorithm": "MAPPO",
+    "episodes": 100,
+    "target_stage_steps": 5000000,
+    "wind": 10.0,
+    "no_go_rate": 0.0,
+    "all_success": 0.45,
+    "drone_success": 0.79,
+    "collision_rate": 0.0,
+    "collided_drones": 0.0,
+    "min_sep": 3.7401476353910166,
+    "landing_spread": 4.253000000000001,
+    "landing_error": 0.21333012401325213,
+    "time": 15.673333333333337,
+    "outcomes": {
+      "missed": 82,
+      "success": 316,
+      "hard_landing": 2
+    }
+  },
+  {
+    "aircraft": "m30",
+    "algorithm": "PPO (IPPO)",
+    "episodes": 100,
+    "target_stage_steps": 5000000,
+    "wind": 10.0,
+    "no_go_rate": 0.0,
+    "all_success": 0.41,
+    "drone_success": 0.785,
+    "collision_rate": 0.0,
+    "collided_drones": 0.0,
+    "min_sep": 3.970404915509357,
+    "landing_spread": 4.210000000000001,
+    "landing_error": 0.22189629986625728,
+    "time": 15.792682926829269,
+    "outcomes": {
+      "missed": 85,
+      "success": 314,
+      "hard_landing": 1
+    }
+  },
+  {
+    "aircraft": "tello",
+    "algorithm": "MAPPO",
+    "episodes": 100,
+    "target_stage_steps": 1500000,
+    "wind": 0.0,
+    "no_go_rate": 0.0,
+    "all_success": 1.0,
+    "drone_success": 1.0,
+    "collision_rate": 0.0,
+    "collided_drones": 0.0,
+    "min_sep": 0.9454606399898544,
+    "landing_spread": 0.31200000000000006,
+    "landing_error": 0.039492517808349774,
+    "time": 3.2500000000000004,
+    "outcomes": {
+      "success": 400
+    }
+  },
+  {
+    "aircraft": "tello",
+    "algorithm": "PPO (IPPO)",
+    "episodes": 100,
+    "target_stage_steps": 1500000,
+    "wind": 0.0,
+    "no_go_rate": 0.0,
+    "all_success": 0.99,
+    "drone_success": 0.9975,
+    "collision_rate": 0.0,
+    "collided_drones": 0.0,
+    "min_sep": 0.9681387181962101,
+    "landing_spread": 0.3709999999999999,
+    "landing_error": 0.037582343511163095,
+    "time": 3.21010101010101,
+    "outcomes": {
+      "success": 399,
+      "hard_landing": 1
+    }
+  },
+  {
+    "aircraft": "tello",
+    "algorithm": "MAPPO",
+    "episodes": 100,
+    "target_stage_steps": 5000000,
+    "wind": 3.0,
+    "no_go_rate": 0.0,
+    "all_success": 0.9,
+    "drone_success": 0.975,
+    "collision_rate": 0.0,
+    "collided_drones": 0.0,
+    "min_sep": 0.9547364056931638,
+    "landing_spread": 4.046000000000001,
+    "landing_error": 0.059216498877584026,
+    "time": 6.898888888888889,
+    "outcomes": {
+      "success": 390,
+      "timeout": 3,
+      "missed": 6,
+      "out_of_bounds": 1
+    }
+  },
+  {
+    "aircraft": "tello",
+    "algorithm": "PPO (IPPO)",
+    "episodes": 100,
+    "target_stage_steps": 5000000,
+    "wind": 3.0,
+    "no_go_rate": 0.0,
+    "all_success": 0.91,
+    "drone_success": 0.9775,
+    "collision_rate": 0.0,
+    "collided_drones": 0.0,
+    "min_sep": 1.0114423628930753,
+    "landing_spread": 4.224,
+    "landing_error": 0.052502261174759104,
+    "time": 6.894505494505496,
+    "outcomes": {
+      "success": 391,
+      "out_of_bounds": 2,
+      "missed": 6,
+      "timeout": 1
+    }
+  }
+]

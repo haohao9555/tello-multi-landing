@@ -1,8 +1,4 @@
-"""打包给 GUI 同学：源码 + MARL 核心代码副本（vendor/）+ 训练好的模型 + 评估结果和视频 + 说明文档。
-
-  /venv/main/bin/python tools/make_package.py --model runs/marl/mappo/tello_4drone_seq/seed_1/<时间戳>/latest.pt
-输出 dist/tello_multi_landing_<日期>.tar.gz
-"""
+"""Make package."""
 import argparse
 import shutil
 import tarfile
@@ -11,7 +7,7 @@ from pathlib import Path
 
 WS = Path(__file__).resolve().parents[1]
 MARL_CORE = WS / 'vendor' / 'mamujoco_v2'
-MARL_FILES = ['runner.py', 'algorithms/__init__.py', 'algorithms/mappo.py', 'algorithms/happo.py', 'algorithms/mat.py',
+MARL_FILES = ['runner.py', 'algorithms/__init__.py', 'algorithms/mappo.py', 'algorithms/ippo.py', 'algorithms/happo.py', 'algorithms/mat.py',
               'models/__init__.py', 'models/mappo.py', 'models/happo.py', 'models/mat.py', 'models/common_critic.py',
               'utils/__init__.py', 'utils/buffer.py', 'utils/normalization.py', 'configs/config.yaml']
 IGNORE = shutil.ignore_patterns('__pycache__', '*.pyc', '*.egg-info')
@@ -19,15 +15,15 @@ IGNORE = shutil.ignore_patterns('__pycache__', '*.pyc', '*.egg-info')
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', required=True, type=Path, help='MAPPO / HAPPO checkpoint（latest.pt）')
-    parser.add_argument('--videos', nargs='*', type=Path, default=[], help='要附带的演示视频（mp4 / gif）')
+    parser.add_argument('--model', required=True, type=Path, help='MAPPO / HAPPO checkpoint(latest.pt)')
+    parser.add_argument('--videos', nargs='*', type=Path, default=[], help='Demo video to include (mp4 or gif)')
     parser.add_argument('--out', type=Path, default=WS / 'dist')
     args = parser.parse_args()
 
     name = f'tello_multi_landing_{date.today():%Y%m%d}'
     stage = args.out / name
     if stage.exists():
-        raise SystemExit(f'{stage} 已存在，请先移走或换输出目录')
+        raise SystemExit(f'{stage} already exists; move it or select another output directory')
     stage.mkdir(parents=True)
 
     shutil.copytree(WS / 'src', stage / 'src', ignore=IGNORE)

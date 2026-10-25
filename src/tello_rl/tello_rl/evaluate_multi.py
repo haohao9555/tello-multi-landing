@@ -1,8 +1,4 @@
-"""四机评估：每个风级跑 N 个回合（固定种子），统计全部成功率、单机成功率、降落区违规、各种失败、最小间距。
-
-  python -m tello_rl.evaluate_multi --algo ppo --run runs/ppo_multi_v1_s1 --checkpoint ppo_step600000.pt
-加 --winds 4 5 时会启用起飞前测风，统计"大风不起飞"判断。
-"""
+"""Evaluate multi."""
 import argparse
 import importlib
 import json
@@ -18,8 +14,8 @@ from tello_rl.multi_env import FastMultiTelloEnv
 EVAL_SEED = 10_000
 
 
-def evaluate(policy, wind_level, n_episodes, preflight):
-    env = FastMultiTelloEnv(wind_level=wind_level, preflight=preflight)
+def evaluate(policy, wind_level, n_episodes, preflight, v_max_xy=None, profile='tello'):
+    env = FastMultiTelloEnv(wind_level=wind_level, preflight=preflight, v_max_xy=v_max_xy, profile=profile)
     infos = []
     for i in range(n_episodes):
         obs, _ = env.reset(seed=EVAL_SEED + i)
@@ -30,19 +26,18 @@ def evaluate(policy, wind_level, n_episodes, preflight):
         infos.append(info)
     flown = [r for r in infos if r['go']]
     outcomes = Counter(o for r in flown for o in r['outcomes'])
+    spreads = [max(t) - min(t) for r in flown for t in [[x for x in r['touchdown_times'] if x is not None]] if len(t) > 1]
     return {
         'wind': wind_level,
         'no_go_rate': 1 - len(flown) / len(infos),
         'all_success': float(np.mean([r['all_success'] for r in flown])) if flown else None,
-        'all_landed': float(np.mean([r['all_landed'] for r in flown])) if flown else None,
-        'violation_rate': float(np.mean([r['zone_violation_steps'] > 0 for r in flown])) if flown else None,
-        'min_landing_gap': float(np.mean([r['min_landing_gap'] for r in flown if r['min_landing_gap'] is not None]))
-        if flown and any(r['min_landing_gap'] is not None for r in flown) else None,
         'drone_success': float(np.mean([r['n_success'] / mt.N_DRONES for r in flown])) if flown else None,
-        'collision_rate': float(np.mean(['collision' in r['outcomes'] for r in flown])) if flown else None,
+        'collision_rate': float(np.mean([r['n_collisions'] > 0 for r in flown])) if flown else None,
+        'collided_drones': float(np.mean([r['n_collisions'] for r in flown])) if flown else None,
         'min_sep': float(np.mean([r['min_sep'] for r in flown])) if flown else None,
+        'landing_spread': float(np.mean(spreads)) if spreads else None,
         'landing_error': float(np.mean([r['landing_error'] for r in flown if r['landing_error'] is not None]))
-        if flown else None,
+        if flown and any(r['landing_error'] is not None for r in flown) else None,
         'time': float(np.mean([r['time'] for r in flown if r['all_success']]))
         if flown and any(r['all_success'] for r in flown) else None,
         'outcomes': dict(outcomes),
@@ -51,11 +46,11 @@ def evaluate(policy, wind_level, n_episodes, preflight):
 
 def main():
     import torch
-    torch.set_num_threads(1)   # 容器只有约 7.7 核，还有别的实验在跑
+    torch.set_num_threads(1)
     parser = argparse.ArgumentParser()
     parser.add_argument('--algo', required=True, choices=['td3', 'ppo', 'fpo'])
     parser.add_argument('--run', required=True)
-    parser.add_argument('--checkpoint', default=None, help='默认用 <algo>_final.pt')
+    parser.add_argument('--checkpoint', default=None, help='Defaults to <algo>_final.pt')
     parser.add_argument('--episodes', type=int, default=100)
     parser.add_argument('--winds', type=float, nargs='+', default=list(task.WIND_LEVELS))
     args = parser.parse_args()
@@ -66,15 +61,15 @@ def main():
 
     fmt = lambda v, f='.1%': format(v, f) if v is not None else '-'
     print(f'{args.algo.upper()}  {ckpt}')
-    print(f'{"风速":>6} {"不起飞":>6} {"全部成功":>7} {"全落地":>6} {"有违规":>6} {"单机成功":>7} {"有相撞":>6} '
-          f'{"落地间隔":>7} {"总用时":>6} {"着陆误差":>7}   结果分布')
+    print(f'{"Wind":>6} {"No-go":>6} {"Fleet success":>7} {"Drone success":>7} {"Collision rate":>6} {"Collided drones":>7} '
+          f'{"Min separation":>7} {"Touchdown spread":>8} {"Total duration":>6} {"Landing error":>7}   Outcome counts')
     results = []
     for level in args.winds:
         r = evaluate(policy, level, args.episodes, preflight=level > task.MAX_WIND)
         results.append(r)
-        print(f'{level:>4.0f} m/s {fmt(r["no_go_rate"]):>6} {fmt(r["all_success"]):>8} {fmt(r["all_landed"]):>7} '
-              f'{fmt(r["violation_rate"]):>7} {fmt(r["drone_success"]):>8} {fmt(r["collision_rate"]):>7} '
-              f'{fmt(r["min_landing_gap"], ".1f"):>6} s {fmt(r["time"], ".1f"):>5} s {fmt(r["landing_error"], ".3f"):>6} m   '
+        print(f'{level:>4.0f} m/s {fmt(r["no_go_rate"]):>6} {fmt(r["all_success"]):>8} {fmt(r["drone_success"]):>8} '
+              f'{fmt(r["collision_rate"]):>7} {fmt(r["collided_drones"], ".2f"):>8} {fmt(r["min_sep"], ".2f"):>7} m '
+              f'{fmt(r["landing_spread"], ".1f"):>7} s {fmt(r["time"], ".1f"):>5} s {fmt(r["landing_error"], ".3f"):>6} m   '
               f'{r["outcomes"]}')
     out = run / f'eval_multi_{ckpt.stem}.json'
     out.write_text(json.dumps(results, indent=2, ensure_ascii=False))

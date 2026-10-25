@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""Step 1 自动验收：起飞 -> 悬停 -> 平移 -> 侧风 -> 降落。
-
-不需要 ROS，直接用 Gazebo 自带的 Python 接口（gz-transport）。
-
-用法：
-  python3 check_step1.py            自己启动一个无界面仿真，跑完自动关闭
-  python3 check_step1.py --attach   连接已经在运行的仿真（先 ./run_sim.sh 打开 GUI，可以看着它飞）
-  python3 check_step1.py --wind 2   侧风风速（m/s，默认 3）
-"""
+"""Check step1."""
 import argparse
 import math
 import os
@@ -24,7 +16,7 @@ WORLD_FILE = PKG_DIR / 'worlds' / f'{WORLD_NAME}.sdf'
 
 
 def quat_rotate(q, v):
-    """用四元数 q = (w, x, y, z) 把向量 v 从机体系转到世界系。"""
+    """Quat rotate."""
     w, x, y, z = q
     vx, vy, vz = v
     # t = 2 * cross(q_vec, v)
@@ -37,7 +29,7 @@ def quat_rotate(q, v):
 
 
 def tilt_deg(q):
-    """机体 z 轴与竖直方向的夹角。"""
+    """Tilt deg."""
     w, x, y, z = q
     cos_tilt = 1 - 2 * (x * x + y * y)
     return math.degrees(math.acos(max(-1.0, min(1.0, cos_tilt))))
@@ -45,7 +37,7 @@ def tilt_deg(q):
 
 class TelloSim:
     def __init__(self):
-        # 必须在环境变量设置好之后再 import / 创建 Node
+
         from gz.transport13 import Node
         from gz.msgs10.boolean_pb2 import Boolean
         from gz.msgs10.odometry_pb2 import Odometry
@@ -79,13 +71,13 @@ class TelloSim:
         t0 = time.time()
         while self.latest() is None:
             if time.time() - t0 > timeout:
-                raise RuntimeError('收不到 /model/tello/odometry，仿真没有启动？')
+                raise RuntimeError('No /model/tello/odometry received; is the simulation running?')
             time.sleep(0.1)
 
     def enable(self, on):
         msg = self.Boolean()
         msg.data = on
-        for _ in range(3):  # 刚 advertise 时可能丢第一条，多发几次
+        for _ in range(3):
             self.enable_pub.publish(msg)
             time.sleep(0.05)
 
@@ -97,7 +89,7 @@ class TelloSim:
         self.wind_pub.publish(msg)
 
     def fly(self, vx=0.0, vy=0.0, vz=0.0, duration=1.0, stop_if=None):
-        """持续发送速度指令 duration 秒（仿真时间），返回这段时间的采样。"""
+        """Fly."""
         msg = self.Twist()
         msg.linear.x, msg.linear.y, msg.linear.z = vx, vy, vz
         t_start = self.latest()[0]
@@ -134,9 +126,9 @@ def run_checks(sim, wind_speed):
 
     sim.wait_ready()
     z_ground = sim.latest()[1][2]
-    print(f'初始高度 z = {z_ground:.3f} m')
+    print(f'Initial height z = {z_ground:.3f} m')
 
-    print('1) 起飞：vz = 0.5 m/s 持续 2 s，然后悬停 3 s')
+    print('1) Ascend: vz = 0.5 m/s for 2 s, then hold for 3 s')
     sim.enable(True)
     sim.fly(vz=0.5, duration=2.0)
     hover = window(sim.fly(duration=3.0), 1.5)
@@ -144,20 +136,20 @@ def run_checks(sim, wind_speed):
     vxy = [math.hypot(s[2][0], s[2][1]) for s in hover]
     vz = [abs(s[2][2]) for s in hover]
     tilt = [s[3] for s in hover]
-    check('悬停高度', 0.8 < mean(z) < 1.2, f'z = {mean(z):.3f} m（期望约 1.0）')
-    check('悬停稳定', std(z) < 0.02 and max(vz) < 0.05 and max(vxy) < 0.05 and max(tilt) < 3,
-          f'z 标准差 {std(z):.4f} m，|vz| 最大 {max(vz):.3f}，水平速度最大 {max(vxy):.3f} m/s，'
-          f'倾角最大 {max(tilt):.2f}°')
+    check('Hover height', 0.8 < mean(z) < 1.2, f'z = {mean(z):.3f} m(expected approximately 1.0)')
+    check('Stable hover', std(z) < 0.02 and max(vz) < 0.05 and max(vxy) < 0.05 and max(tilt) < 3,
+          f'z standard deviation {std(z):.4f} m ; maximum |vz| {max(vz):.3f}, maximum horizontal speed {max(vxy):.3f} m/s, '
+          f'maximum tilt {max(tilt):.2f}°')
 
-    print('2) 平移：vx = 0.5 m/s 持续 3 s')
+    print('2) Translate: vx = 0.5 m/s for 3 s')
     track = window(sim.fly(vx=0.5, duration=3.0), 1.0)
     vx = mean([s[2][0] for s in track])
     vy = mean([s[2][1] for s in track])
-    check('速度跟踪', abs(vx - 0.5) < 0.1 and abs(vy) < 0.05,
-          f'实际 vx = {vx:.3f} m/s，vy = {vy:.3f} m/s')
+    check('Velocity tracking', abs(vx - 0.5) < 0.1 and abs(vy) < 0.05,
+          f'Measured vx = {vx:.3f} m/s, vy = {vy:.3f} m/s')
     sim.fly(duration=2.0)
 
-    print(f'3) 侧风：+y 方向 {wind_speed} m/s，悬停指令保持 6 s')
+    print(f'3) crosswind in +Y direction at {wind_speed} m/s, hold command for 6 s')
     sim.set_wind(0.0, wind_speed)
     windy = sim.fly(duration=6.0)
     late = window(windy, 2.0)
@@ -165,21 +157,21 @@ def run_checks(sim, wind_speed):
     drift_y = windy[-1][1][1] - windy[0][1][1]
     dz = max(abs(s[1][2] - windy[0][1][2]) for s in windy)
     max_tilt = max(s[3] for s in windy)
-    check('被风吹偏', drift_vy > 0.05 and drift_y > 0.1,
-          f'稳态漂移速度 vy = {drift_vy:.3f} m/s，6 s 内 y 漂移 {drift_y:.2f} m')
-    check('有风时不失稳', dz < 0.3 and max_tilt < 25,
-          f'高度变化最大 {dz:.3f} m，倾角最大 {max_tilt:.1f}°')
+    check('Wind displacement', drift_vy > 0.05 and drift_y > 0.1,
+          f'Steady drift velocity vy = {drift_vy:.3f} m/s, Y drift over 6 s {drift_y:.2f} m')
+    check('Stable under wind', dz < 0.3 and max_tilt < 25,
+          f'Maximum height change {dz:.3f} m, maximum tilt {max_tilt:.1f}°')
     sim.set_wind(0.0, 0.0)
     sim.fly(duration=3.0)
 
-    print('4) 降落：vz = -0.4 m/s 直到接近地面，然后关闭电机')
+    print('4) Descend: vz = -0.4 m/s until near the surface, then stop motors')
     sim.fly(vz=-0.4, duration=6.0, stop_if=lambda s: s[1][2] < z_ground + 0.03)
     sim.enable(False)
     rest = window(sim.fly(duration=2.0), 0.5)
     z_rest = mean([s[1][2] for s in rest])
     tilt_rest = max(s[3] for s in rest)
-    check('平稳落地', abs(z_rest - z_ground) < 0.01 and tilt_rest < 5,
-          f'落地 z = {z_rest:.3f} m，倾角 {tilt_rest:.1f}°')
+    check('Gentle touchdown', abs(z_rest - z_ground) < 0.01 and tilt_rest < 5,
+          f'Touchdown z = {z_rest:.3f} m, tilt {tilt_rest:.1f}°')
 
     return all(ok for _, ok, _ in results)
 
@@ -187,17 +179,17 @@ def run_checks(sim, wind_speed):
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--attach', action='store_true', help='连接已运行的仿真，不自己启动')
-    parser.add_argument('--wind', type=float, default=3.0, help='侧风风速 m/s')
+    parser.add_argument('--attach', action='store_true', help='Connect to an existing simulation instead of launching one')
+    parser.add_argument('--wind', type=float, default=3.0, help='Crosswind speed in m/s')
     args = parser.parse_args()
 
     server = None
     if not args.attach:
-        # 用独立的 partition，避免和你开着的 GUI 仿真串话题
+
         os.environ['GZ_PARTITION'] = f'tello_check_{os.getpid()}'
         env = dict(os.environ)
         env['GZ_SIM_RESOURCE_PATH'] = f"{PKG_DIR / 'models'}:{env.get('GZ_SIM_RESOURCE_PATH', '')}"
-        print('启动无界面仿真 ...')
+        print('Starting headless simulation ...')
         server = subprocess.Popen(['gz', 'sim', '-s', '-r', str(WORLD_FILE)], env=env,
                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                   start_new_session=True)
@@ -211,7 +203,7 @@ def main():
             except subprocess.TimeoutExpired:
                 os.killpg(server.pid, signal.SIGKILL)
 
-    print('\nStep 1 验收通过 ✅' if ok else '\nStep 1 验收未通过 ❌')
+    print('\nStep 1 validation passed ✅' if ok else '\nStep 1 validation failed ❌')
     sys.exit(0 if ok else 1)
 
 

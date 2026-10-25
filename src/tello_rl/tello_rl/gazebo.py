@@ -1,9 +1,4 @@
-"""直接通过 gz-transport 控制 Gazebo 里的 Tello：启动服务器、同步步进、设位姿、改风、读状态、抓画面。
-
-Step 3 的 Gazebo 训练环境建立在这个类上。仿真一直处于暂停状态，每一步：
-  发速度指令 -> 让仿真走 N 个物理步（0.1 s）-> 等这一时刻的里程计（和画面）到达
-所以结果是确定的，和电脑快慢无关。
-"""
+"""Gazebo."""
 import os
 import signal
 import subprocess
@@ -15,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.append('/usr/lib/python3/dist-packages')   # Gazebo 的 Python 绑定装在系统目录
+sys.path.append('/usr/lib/python3/dist-packages')
 
 from tello_rl import task
 
@@ -23,7 +18,7 @@ DESC_DIR = Path(__file__).resolve().parents[2] / 'tello_sim_description'
 WORLD_NAME = 'tello_land'
 PHYSICS_DT = 0.001
 STEPS_PER_CONTROL = int(round(task.CONTROL_DT / PHYSICS_DT))
-# 机身中心离板面的高度：板面 z = 0.01，机身半高 0.0205
+
 BODY_OFFSET_Z = 0.01 + 0.0205
 
 CAMERA_SDF = """
@@ -50,7 +45,7 @@ CAMERA_SDF = """
 
 
 def quat_rotate(q, v):
-    """四元数 q = (w, x, y, z) 把机体系向量 v 转到世界系。"""
+    """Quat rotate."""
     w, x, y, z = q
     t = 2 * np.cross([x, y, z], v)
     return v + w * t + np.cross([x, y, z], t)
@@ -58,7 +53,7 @@ def quat_rotate(q, v):
 
 class GazeboTello:
     def __init__(self, camera=False, width=1280, height=720, partition=None):
-        # 每个实例用独立的 partition，多个仿真并行时互不串话题
+
         os.environ['GZ_PARTITION'] = partition or f'tello_{os.getpid()}_{id(self)}'
         from gz.transport13 import Node
         from gz.msgs10.boolean_pb2 import Boolean
@@ -97,16 +92,16 @@ class GazeboTello:
             self.node.subscribe(Image, '/recorder/image', self._on_image)
         self.camera = camera
 
-        # 等服务器加载完：控制服务出现后走一步，直到收到里程计
+
         deadline = time.time() + 60
         while not any('/control' in s for s in self.node.service_list()):
             if time.time() > deadline:
                 self.close()
-                raise RuntimeError('Gazebo 服务器启动超时')
+                raise RuntimeError('Gazebo server startup timed out')
             time.sleep(0.2)
         self.step(np.zeros(3), timeout=60)
 
-    # ---------- 回调 ----------
+
 
     def _on_odom(self, msg):
         t = msg.header.stamp.sec + msg.header.stamp.nsec * 1e-9
@@ -121,14 +116,14 @@ class GazeboTello:
         with self.lock:
             self.image = (t, img.copy())
 
-    # ---------- 控制 ----------
+
 
     def _request(self, service, msg, timeout_ms=5000):
         ok, rep = self.node.request(service, msg, type(msg), self.msgs['Boolean'], timeout_ms)
         return ok and rep.data
 
     def step(self, v_cmd, n=STEPS_PER_CONTROL, timeout=10):
-        """发速度指令（m/s，机体系）后让仿真走 n 个物理步，并等到这一时刻的状态到达。"""
+        """Step."""
         twist = self.msgs['Twist']()
         twist.linear.x, twist.linear.y, twist.linear.z = (float(v) for v in v_cmd)
         self.twist_pub.publish(twist)
@@ -136,7 +131,7 @@ class GazeboTello:
         req.pause = True
         req.multi_step = n
         if not self._request(f'/world/{WORLD_NAME}/control', req):
-            raise RuntimeError('world control 请求失败')
+            raise RuntimeError('World control request failed')
         self.sim_time += n * PHYSICS_DT
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -147,7 +142,7 @@ class GazeboTello:
             if odom_ok and img_ok:
                 return
             time.sleep(0.0005)
-        raise TimeoutError(f'等不到 t = {self.sim_time:.2f} s 的状态')
+        raise TimeoutError(f'Timed out waiting for state at t = {self.sim_time:.2f} s')
 
     def enable(self, on):
         msg = self.msgs['Boolean']()
@@ -166,21 +161,21 @@ class GazeboTello:
         msg.position.x, msg.position.y, msg.position.z = (float(v) for v in position)
         msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z = quat
         if not self._request(f'/world/{WORLD_NAME}/set_pose', msg):
-            raise RuntimeError(f'set_pose({name}) 请求失败')
+            raise RuntimeError(f'set_pose({name}) request failed')
 
     def set_pose(self, rel_pos):
-        """把 Tello 瞬移到相对降落板的位置 rel_pos（底部离板面高度）。"""
+        """Set pose."""
         self._set_model_pose('tello', np.asarray(rel_pos) + np.array([0.0, 0.0, BODY_OFFSET_Z]))
 
     def set_camera(self, position, yaw, pitch):
-        """移动录像摄像机（pitch > 0 向下看）。"""
+        """Set camera."""
         cy, sy, cp, sp = np.cos(yaw / 2), np.sin(yaw / 2), np.cos(pitch / 2), np.sin(pitch / 2)
         self._set_model_pose('recorder_camera', position, (cp * cy, -sp * sy, sp * cy, cp * sy))
 
-    # ---------- 状态 ----------
+
 
     def state(self):
-        """返回 (相对降落板的位置, 世界系速度, 当前画面或 None)。"""
+        """State."""
         with self.lock:
             _, pos, quat, vel_body = self.odom
             image = self.image[1] if self.image is not None else None

@@ -1,0 +1,7 @@
+python-docx
+markdown-it-py
+PyMuPDF
+playwright
+numpy
+matplotlib
+Pillow

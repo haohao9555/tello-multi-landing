@@ -1,7 +1,4 @@
-"""所有算法共用的 centralized critic：网络结构、target 网络、优化器、GAE 目标和回归更新都在这里。
-
-MAPPO / HAPPO / MAT 的 critic 完全相同（每个 run 各自一份权重），算法之间只有 actor 不同。
-"""
+"""Centralised state-value estimator with GAE and regression updates."""
 
 import copy
 
@@ -13,7 +10,7 @@ from utils.buffer import compute_gae
 
 
 class CentralCritic(nn.Module):
-    """归一化 state + agent one-hot -> 每个 agent 的 V。"""
+    """Centralcritic."""
 
     def __init__(self, state_dim, n_agents, hidden_dim):
         super().__init__()
@@ -32,7 +29,7 @@ class CentralCritic(nn.Module):
 
 
 class SharedCritic:
-    """critic 网络 + target 网络 + Adam；提供 GAE 目标、全 batch 回归一步、target 软更新。"""
+    """Sharedcritic."""
 
     def __init__(self, env_info, config, normalizers, device):
         self.config = config
@@ -44,8 +41,7 @@ class SharedCritic:
 
     @torch.no_grad()
     def gae(self, batch, rewards, use_target):
-        """(advantages, returns)，均为 [B,T,N]；returns 已按 running 统计归一化（若开启）。
-        use_target=False 用当前 critic（gae_value=online），True 用 target critic（gae_value=target）。"""
+        """Gae."""
         network = self.target if use_target else self.network
         values = network(self.normalizers.normalize_states(batch.states))
         normalize_returns = self.config["normalization"]["returns"]
@@ -61,7 +57,7 @@ class SharedCritic:
         return advantages, returns
 
     def update(self, batch, returns, valid):
-        """全 batch MSE 回归一步；返回 (loss, grad_norm)。"""
+        """Update."""
         chunks = self.config["training"].get("critic_minibatches", 1)
         if chunks > 1:
             states = self.normalizers.normalize_states(batch.states[:, :-1])[valid]
@@ -69,7 +65,7 @@ class SharedCritic:
             for indices in torch.randperm(states.shape[0], device=states.device).chunk(chunks):
                 loss = (self.network(states[indices]) - targets[indices]).square().mean()
                 if not torch.isfinite(loss):
-                    raise FloatingPointError("critic loss 非有限；请检查学习率和归一化配置")
+                    raise FloatingPointError("Non-finite critic loss; check learning rate and normalisation")
                 self.optimizer.zero_grad(set_to_none=True)
                 loss.backward()
                 grad = nn.utils.clip_grad_norm_(
@@ -80,7 +76,7 @@ class SharedCritic:
         predicted = self.network(self.normalizers.normalize_states(batch.states[:, :-1]))
         loss = (predicted[valid] - returns[valid]).square().mean()
         if not torch.isfinite(loss):
-            raise FloatingPointError("critic loss 非有限；请检查学习率和归一化配置")
+            raise FloatingPointError("Non-finite critic loss; check learning rate and normalisation")
         self.optimizer.zero_grad(set_to_none=True)
         loss.backward()
         grad = nn.utils.clip_grad_norm_(

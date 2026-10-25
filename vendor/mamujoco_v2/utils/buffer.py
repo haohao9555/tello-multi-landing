@@ -1,4 +1,4 @@
-"""Rollout 数据：一批定长 episode 的张量容器，以及 GAE。"""
+"""Rollout tensors, validity masking and generalised advantage estimation."""
 
 from dataclasses import dataclass, fields
 
@@ -7,20 +7,20 @@ import torch
 
 @dataclass
 class RolloutBatch:
-    """B 条 episode × T 步；filled=False 的位置是 episode 提前结束后的 padding。"""
+    """Rolloutbatch."""
 
     observations: torch.Tensor     # [B,T+1,N,O]
     states: torch.Tensor           # [B,T+1,S]
-    inputs: torch.Tensor           # [B,T,N,F]  actor 输入（归一化 obs + 可选 agent ID）
-    actions: torch.Tensor          # [B,T,N,A]  环境动作 sigmoid(raw)
-    raw_actions: torch.Tensor      # [B,T,N,A]  高斯样本 μ + σn
+    inputs: torch.Tensor
+    actions: torch.Tensor
+    raw_actions: torch.Tensor
     means: torch.Tensor            # [B,T,N,A]
     noise: torch.Tensor            # [B,T,N,A]
-    latent: torch.Tensor           # [B,T,N,A]  latent 接口项（MAPPO / HAPPO / MAT 不使用）
+    latent: torch.Tensor
     log_probs: torch.Tensor        # [B,T,N]
     rewards: torch.Tensor          # [B,T,1]
-    terminated: torch.Tensor       # [B,T,1]  只有真实终止为 True
-    truncated: torch.Tensor        # [B,T,1]  到达时间上限为 True
+    terminated: torch.Tensor
+    truncated: torch.Tensor
     filled: torch.Tensor           # [B,T,1]
 
     @property
@@ -33,12 +33,12 @@ class RolloutBatch:
 
     @classmethod
     def stack(cls, rows):
-        """rows: {字段名: 按时间排列的张量列表} -> 在时间维堆叠。"""
+        """Stack."""
         return cls(**{name: torch.stack(rows[name], dim=1) for name in cls.field_names()})
 
     @classmethod
     def concatenate(cls, batches, limit=None):
-        """在 episode 维拼接；各批时间长度可能不同（全部 episode 结束即停止采样），短的在时间维补零（filled=False）。"""
+        """Concatenate."""
         values = {}
         for name in cls.field_names():
             parts = [getattr(batch, name) for batch in batches]
@@ -51,7 +51,7 @@ class RolloutBatch:
 
 
 def compute_gae(rewards, values, terminated, filled, gamma, gae_lambda):
-    """values: [B,T+1,N]；只有真实终止切断 bootstrap，时间截断仍用下一状态的 V。"""
+    """Compute gae."""
     advantages = torch.zeros_like(values[:, :-1])
     accumulator = torch.zeros_like(values[:, 0])
     for time in reversed(range(rewards.shape[1])):
@@ -64,7 +64,7 @@ def compute_gae(rewards, values, terminated, filled, gamma, gae_lambda):
 
 
 def normalize_advantages(advantages, valid):
-    """只用有效位置的均值/标准差做标准化。"""
+    """Normalize advantages."""
     selected = advantages[valid]
     advantages = advantages.clone()
     advantages[valid] = (selected - selected.mean()) / (selected.std(unbiased=False) + 1e-8)

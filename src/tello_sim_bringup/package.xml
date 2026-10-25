@@ -3,7 +3,7 @@
 <package format="3">
   <name>tello_sim_bringup</name>
   <version>0.1.0</version>
-  <description>Tello 仿真的启动文件与配置：Gazebo + ros_gz_bridge + 接口节点</description>
+  <description>Tello simulation launch and configuration: Gazebo, ROS bridge and interface node</description>
   <maintainer email="243935570+haohao9555@users.noreply.github.com">haohao9555</maintainer>
   <license>MIT</license>
 

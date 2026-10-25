@@ -1,12 +1,4 @@
-"""在 Gazebo 四机场景里回放 MAPPO / HAPPO（逐架降落），录成功和失败的片段。
-
-每个片段由 "风速:类型" 指定，如 1:success、3:failure。先用快速环境按种子筛出大概率是这种结果的场景，
-再到 Gazebo 里跑；片段上标的是 Gazebo 里实际发生的结果（和训练环境同一套判定规则）。
-相撞的飞机会关电机掉下来。
-
-  python -m tello_rl.record_gazebo_multi runs/marl/mappo/.../latest.pt --cases 1:success 3:success 3:failure
-输出 runs/gazebo_multi_cases.mp4 和同名 .gif
-"""
+"""Record gazebo multi."""
 import os
 
 for _variable in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS'):
@@ -35,20 +27,19 @@ HOLD_FRAMES = 20
 NAMES = ['N', 'E', 'S', 'W']
 COLORS = [tuple(int(255 * c) for c in rgb) for rgb in DRONE_COLORS]
 OUTCOME_TEXT = {'success': 'LANDED', 'missed': 'MISSED PAD', 'hard_landing': 'HARD LANDING',
-                'occupied': 'PAD TAKEN', 'collision': 'COLLISION', 'out_of_bounds': 'OUT OF BOUNDS',
+                'collision': 'COLLISION', 'out_of_bounds': 'OUT OF BOUNDS',
                 'timeout': 'TIMEOUT', 'no_go': 'NO TAKEOFF (wind)'}
 FONT = font_manager.findfont('DejaVu Sans')
 BIG, MID, SMALL = (ImageFont.truetype(FONT, s) for s in (44, 30, 20))
 
 
-def draw_overlay(frame, label, wind, mean_speed, t, outcomes, errors, trails, final=None, violations=0):
+def draw_overlay(frame, label, wind, mean_speed, t, outcomes, errors, trails, final=None):
     img = Image.fromarray(frame)
     d = ImageDraw.Draw(img, 'RGBA')
     d.rectangle([0, 0, 640, 330], fill=(255, 255, 255, 200))
     d.text((20, 12), label, font=BIG, fill=(20, 20, 20))
     d.text((20, 70), f'wind {np.linalg.norm(wind):.1f} m/s (mean {mean_speed:.0f})   t = {t:4.1f} s',
            font=MID, fill=(20, 20, 20))
-    d.text((360, 12), f'zone violations: {violations}', font=SMALL, fill=(200, 40, 40) if violations else (60, 60, 60))
     for i in range(N):
         y = 120 + 48 * i
         d.rectangle([22, y + 4, 52, y + 34], fill=COLORS[i])
@@ -61,21 +52,19 @@ def draw_overlay(frame, label, wind, mean_speed, t, outcomes, errors, trails, fi
             color = (30, 150, 50) if outcomes[i] == 'success' else (200, 40, 40)
         d.text((66, y), text, font=MID, fill=color)
     if final is not None:
-        ok = all(o == 'success' for o in outcomes) and violations == 0
-        banner = 'ALL 4 LANDED, ONE BY ONE' if ok else 'FAILED'
+        ok = all(o == 'success' for o in outcomes)
+        banner = 'ALL 4 LANDED' if ok else 'FAILED'
         d.rectangle([WIDTH // 2 - 300, HEIGHT - 130, WIDTH // 2 + 300, HEIGHT - 40],
                     fill=(40, 160, 60, 220) if ok else (200, 40, 40, 220))
         d.text((WIDTH // 2, HEIGHT - 85), banner, font=BIG, fill=(255, 255, 255), anchor='mm')
 
-    # 右上角俯视小地图：±2.8 m
+
     size, x0, y0, span = 360, WIDTH - 380, 20, 2.8
     to_px = lambda p: (x0 + size / 2 + p[0] / span * size / 2, y0 + size / 2 - p[1] / span * size / 2)
     d.rectangle([x0, y0, x0 + size, y0 + size], fill=(255, 255, 255, 210), outline=(80, 80, 80))
-    za, zb = to_px((-mt.ZONE_RADIUS, mt.ZONE_RADIUS)), to_px((mt.ZONE_RADIUS, -mt.ZONE_RADIUS))
-    d.ellipse([za, zb], outline=(200, 40, 40), width=2)   # 降落区
-    for pad in mt.PADS:
+    for i, pad in enumerate(mt.TARGETS):
         a, b = to_px(pad + [-0.2, 0.2]), to_px(pad + [0.2, -0.2])
-        d.rectangle([a, b], fill=(255, 140, 0, 230))
+        d.rectangle([a, b], fill=(255, 140, 0, 230), outline=COLORS[i], width=4)
     for i in range(N):
         if len(trails[i]) > 1:
             d.line([to_px(p) for p in trails[i]], fill=COLORS[i], width=3)
@@ -93,7 +82,7 @@ def draw_overlay(frame, label, wind, mean_speed, t, outcomes, errors, trails, fi
 
 
 def run_episode(player, policy, label, wind_level, seed, write):
-    """用 playback.GazeboPlayer 跑一回合，叠加文字后写视频。返回 (每架结果, 违规步数)。"""
+    """Run episode."""
     trails = [[] for _ in range(N)]
     frame = None
     for frame in player.play(policy, wind_level, seed, hold_frames=HOLD_FRAMES):
@@ -101,13 +90,12 @@ def run_episode(player, policy, label, wind_level, seed, write):
             trails[i].append(frame.positions[i, :2].copy())
         outcomes = [None if s == 'flying' else s for s in frame.status]
         write(draw_overlay(frame.image, label, frame.wind, frame.wind_mean, frame.t, outcomes,
-                           frame.landing_errors, trails, final=frame.done or None,
-                           violations=frame.zone_violations))
-    return frame.status, frame.zone_violations
+                           frame.landing_errors, trails, final=frame.done or None))
+    return frame.status
 
 
 def candidate_seeds(policy, wind_level, want_success, start=20_000, limit=300):
-    """先在快速环境里找"大概率是这种结果"的种子。"""
+    """Candidate seeds."""
     env = FastMultiTelloEnv(wind_level=wind_level)
     for seed in range(start, start + limit):
         obs, _ = env.reset(seed=seed)
@@ -123,8 +111,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('checkpoint', type=Path)
     parser.add_argument('--cases', nargs='+', default=['1:success', '3:success', '3:failure'],
-                        help='风速:success、风速:failure，或 风速:类型:种子（直接录这个种子）')
-    parser.add_argument('--tries', type=int, default=6, help='每个片段在 Gazebo 里最多试几个场景')
+                        help='wind:success, wind:failure, or wind:outcome:seed to record that seed')
+    parser.add_argument('--tries', type=int, default=6, help='Maximum number of Gazebo scene attempts per clip')
     parser.add_argument('--out', default=str(RUNS_DIR / 'gazebo_multi_cases.mp4'))
     args = parser.parse_args()
 
@@ -139,7 +127,7 @@ def main():
             seeds = [int(fixed[0])] if fixed else candidate_seeds(policy, wind_level, want_success)
             for n_try, seed in enumerate(seeds):
                 if n_try >= args.tries:
-                    print(f'{case}: {args.tries} 次都没在 Gazebo 里得到想要的结果，跳过', flush=True)
+                    print(f'{case}: desired outcome not found in {args.tries} Gazebo attempts; skipping', flush=True)
                     break
                 clip = workdir / f'case{n_case}_try{n_try}.mp4'
                 ffmpeg = subprocess.Popen(
@@ -147,12 +135,12 @@ def main():
                      '-s', f'{WIDTH}x{HEIGHT}', '-r', str(int(round(1 / task.CONTROL_DT))), '-i', '-',
                      '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '22', str(clip)],
                     stdin=subprocess.PIPE)
-                outcomes, violations = run_episode(player, policy, f'{algo.upper()}   case {n_case + 1}', wind_level,
-                                                   seed, lambda f: ffmpeg.stdin.write(f.tobytes()))
+                outcomes = run_episode(player, policy, f'{algo.upper()}   case {n_case + 1}', wind_level,
+                                       seed, lambda f: ffmpeg.stdin.write(f.tobytes()))
                 ffmpeg.stdin.close()
                 ffmpeg.wait()
-                got_success = all(o == 'success' for o in outcomes) and violations == 0
-                print(f'{case} seed {seed}: Gazebo -> {outcomes}, 违规 {violations} 步', flush=True)
+                got_success = all(o == 'success' for o in outcomes)
+                print(f'{case} seed {seed}: Gazebo -> {outcomes}', flush=True)
                 if fixed or got_success == want_success:
                     clips.append(clip)
                     break
@@ -167,7 +155,7 @@ def main():
     subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-i', args.out, '-vf',
                     'fps=10,scale=720:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse',
                     str(gif)], check=True)
-    print(f'-> {args.out}\n-> {gif}\n（单个片段在 {workdir}）')
+    print(f'-> {args.out}\n-> {gif}\n(Individual clips: {workdir})')
 
 
 if __name__ == '__main__':

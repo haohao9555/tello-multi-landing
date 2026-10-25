@@ -1,15 +1,4 @@
-"""TD3（连续动作，离策略）—— 由 ATARI/CARTPOLE.ipynb 的手写 DQN 改来。
-
-和 DQN 的区别：
-  - Qnet(s) 输出每个动作的 Q  ->  两个 Critic Q1(s,a)、Q2(s,a) + 一个 Actor μ(s)（tanh 限制在 [-1, 1]）
-  - TD 目标：r + γ·max Q'  ->  r + γ·min(Q1', Q2')(s', μ'(s') + 截断噪声)；只用 terminated，超时不算结束
-  - 目标网络：每 TARGET_UPDATE 步整体复制  ->  每次更新做软更新（τ = 0.005）
-  - Actor 延迟更新：每 POLICY_DELAY 次 critic 更新才更新一次 actor
-  - 探索：ε-greedy  ->  在 actor 输出上加高斯噪声
-  - 去掉 np.sign 奖励裁剪和 life_lost
-
-用法：python -m tello_rl.td3 --env fast --total-steps 150000 --seed 1
-"""
+"""Td3."""
 import copy
 import time
 
@@ -26,12 +15,12 @@ from tello_rl.common import EpisodeLogger, make_env, mlp, parse_args, set_seed
 LR = 3e-4
 GAMMA = 0.99
 BUFFER_SIZE = 300_000
-LEARNING_STARTS = 5_000      # 之前用随机动作填 buffer
+LEARNING_STARTS = 5_000
 BATCH_SIZE = 256
-TAU = 0.005                  # 目标网络软更新系数
+TAU = 0.005
 POLICY_DELAY = 2
-EXPL_NOISE = 0.2             # 探索噪声 σ（0.1 时容易卡在悬停不降落）
-TARGET_NOISE = 0.2           # 目标策略平滑噪声 σ
+EXPL_NOISE = 0.2
+TARGET_NOISE = 0.2
 NOISE_CLIP = 0.5
 
 EVAL_INTERVAL = 50_000
@@ -47,17 +36,25 @@ class Actor(nn.Module):
         return torch.tanh(self.net(x.float()))
 
 
-# critic network（Q(s, a)：动作作为输入）
+
 class Critic(nn.Module):
-    def __init__(self, obs_dim, act_dim):
+    def __init__(self, obs_dim, act_dim, hidden=128, depth=2):
         super().__init__()
-        self.net = mlp(obs_dim + act_dim, 1)
+        if hidden <= 0 or depth <= 0:
+            raise ValueError('Critic hidden width and depth must be positive.')
+        layers = []
+        features = obs_dim + act_dim
+        for _ in range(depth):
+            layers.extend([nn.Linear(features, hidden), nn.SiLU()])
+            features = hidden
+        layers.append(nn.Linear(features, 1))
+        self.net = nn.Sequential(*layers)
 
     def forward(self, x, a):
         return self.net(torch.cat([x.float(), a.float()], dim=-1)).squeeze(-1)
 
 
-# Replaybuffer（CARTPOLE 版，动作改成连续向量，done 改成 terminated）
+
 class ReplayBuffer:
     def __init__(self, capacity, obs_dim, act_dim):
         self.obs = np.zeros((capacity, obs_dim), dtype=np.float32)
@@ -93,10 +90,10 @@ def soft_update(target, source, tau=TAU):
 
 
 class TD3:
-    def __init__(self, obs_dim, act_dim, device):
+    def __init__(self, obs_dim, act_dim, device, critic_hidden=128, critic_depth=2):
         self.actor = Actor(obs_dim, act_dim).to(device)
-        self.critic1 = Critic(obs_dim, act_dim).to(device)
-        self.critic2 = Critic(obs_dim, act_dim).to(device)
+        self.critic1 = Critic(obs_dim, act_dim, critic_hidden, critic_depth).to(device)
+        self.critic2 = Critic(obs_dim, act_dim, critic_hidden, critic_depth).to(device)
         self.actor_target = copy.deepcopy(self.actor)
         self.critic1_target = copy.deepcopy(self.critic1)
         self.critic2_target = copy.deepcopy(self.critic2)
@@ -155,7 +152,7 @@ class TD3:
 
 
 def make_policy(checkpoint_path, obs_dim, act_dim, device='cpu'):
-    """评估用的确定性策略：actor 输出，不加噪声。"""
+    """Make policy."""
     actor = Actor(obs_dim, act_dim).to(device)
     actor.load_state_dict(torch.load(checkpoint_path, map_location=device)['actor'])
     actor.eval()
@@ -172,10 +169,10 @@ def main():
     set_seed(args.seed)
     device = torch.device(args.device)
 
-    env = make_env(args.env)
+    env = make_env(args.env, wind_level=args.wind, constant_wind=args.constant_wind)
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
-    # 动作统一在 [-1, 1] 里学，送进环境前按动作空间缩放（Tello 环境本来就是 [-1, 1]）
+
     act_low, act_high = env.action_space.low, env.action_space.high
     to_env = lambda a: act_low + (a + 1.0) * 0.5 * (act_high - act_low)
 

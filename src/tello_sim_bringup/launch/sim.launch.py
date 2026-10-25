@@ -1,8 +1,4 @@
-"""一键启动 Tello 仿真：Gazebo + ros_gz_bridge + 接口节点。
-
-  ros2 launch tello_sim_bringup sim.launch.py                 # 带 GUI
-  ros2 launch tello_sim_bringup sim.launch.py headless:=true  # 无界面
-"""
+"""Sim.launch."""
 import os
 
 from ament_index_python.packages import get_package_share_directory
@@ -33,9 +29,9 @@ def generate_launch_description():
     bringup = get_package_share_directory('tello_sim_bringup')
     return LaunchDescription([
         DeclareLaunchArgument('headless', default_value='false',
-                              description='true：只跑仿真服务器，不开 GUI'),
+                              description='true: run the simulation server without a GUI'),
         DeclareLaunchArgument('world', default_value='tello_land.sdf',
-                              description='tello_sim_description/worlds/ 下的文件名'),
+                              description='World filename under tello_sim_description/worlds/'),
         AppendEnvironmentVariable('GZ_SIM_RESOURCE_PATH', os.path.join(desc, 'models')),
         OpaqueFunction(function=launch_gazebo),
         Node(package='ros_gz_bridge', executable='parameter_bridge', name='tello_bridge',

@@ -1,8 +1,4 @@
-"""四机 Gazebo 场景：4 块平台 + 4 架 Tello（tello_1~4，机身颜色不同），同步步进控制。
-
-world 由 tello_land.sdf 生成：去掉原来的单机和单块平台，按 multi_task.PADS 放 4 块平台，
-4 架 Tello 由 models/tello/model.sdf 复制并改话题命名空间（/tello_i/...、/model/tello_i/odometry）。
-"""
+"""Gazebo multi."""
 import os
 import re
 import signal
@@ -19,7 +15,7 @@ from tello_rl.gazebo import (BODY_OFFSET_Z, DESC_DIR, PHYSICS_DT, STEPS_PER_CONT
                              quat_rotate)
 
 N = mt.N_DRONES
-DRONE_COLORS = [(0.90, 0.25, 0.25), (0.25, 0.70, 0.30), (0.25, 0.45, 0.90), (0.95, 0.80, 0.15)]   # 北红 东绿 南蓝 西黄
+DRONE_COLORS = [(0.90, 0.25, 0.25), (0.25, 0.70, 0.30), (0.25, 0.45, 0.90), (0.95, 0.80, 0.15)]
 
 CAMERA_SDF = """
     <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
@@ -45,7 +41,7 @@ CAMERA_SDF = """
 
 
 def drone_sdf(i):
-    """第 i 架 Tello 的 <model> 片段：改名字、话题命名空间和机身颜色。"""
+    """Drone sdf."""
     text = (DESC_DIR / 'models' / 'tello' / 'model.sdf').read_text()
     model = text[text.index('<model name="tello">'):text.rindex('</model>') + len('</model>')]
     name = f'tello_{i + 1}'
@@ -53,8 +49,10 @@ def drone_sdf(i):
     model = model.replace('<robotNamespace>tello</robotNamespace>', f'<robotNamespace>{name}</robotNamespace>')
     model = model.replace('/model/tello/odometry', f'/model/{name}/odometry')
     r, g, b = DRONE_COLORS[i]
-    model = model.replace('<ambient>0.9 0.9 0.9 1</ambient>\n          <diffuse>0.9 0.9 0.9 1</diffuse>',
-                          f'<ambient>{r} {g} {b} 1</ambient>\n          <diffuse>{r} {g} {b} 1</diffuse>')
+    # Colour only the fleet identification panel; keep the detailed white shell.
+    model = re.sub(r'(<visual name="fleet_accent">.*?<ambient>).*?(</ambient>.*?<diffuse>).*?(</diffuse>)',
+                   lambda match: f'{match[1]}{r} {g} {b} 1{match[2]}{r} {g} {b} 1{match[3]}',
+                   model, flags=re.S)
     x, y = 2.0 * np.cos(mt.DIRECTIONS[i]), 2.0 * np.sin(mt.DIRECTIONS[i])
     return model.replace(f'<model name="{name}">',
                          f'<model name="{name}">\n    <pose>{x:.3f} {y:.3f} {BODY_OFFSET_Z - 0.01:.4f} 0 0 0</pose>', 1)
@@ -109,7 +107,7 @@ class GazeboMultiTello:
         while not any('/control' in s for s in self.node.service_list()):
             if time.time() > deadline:
                 self.close()
-                raise RuntimeError('Gazebo 服务器启动超时')
+                raise RuntimeError('Gazebo server startup timed out')
             time.sleep(0.2)
         self.step(np.zeros((N, 3)), timeout=90)
 
@@ -133,7 +131,7 @@ class GazeboMultiTello:
         return ok and rep.data
 
     def step(self, v_cmd_world, n=STEPS_PER_CONTROL, timeout=20):
-        """每架发世界系速度指令（m/s，按当前偏航转到机体系），然后让仿真走 n 个物理步。"""
+        """Step."""
         for i in range(N):
             v = np.asarray(v_cmd_world[i], dtype=np.float64)
             if self.odom[i] is not None:
@@ -148,7 +146,7 @@ class GazeboMultiTello:
         req.pause = True
         req.multi_step = n
         if not self._request(f'/world/{WORLD_NAME}/control', req):
-            raise RuntimeError('world control 请求失败')
+            raise RuntimeError('World control request failed')
         self.sim_time += n * PHYSICS_DT
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -159,7 +157,7 @@ class GazeboMultiTello:
             if odom_ok and img_ok:
                 return
             time.sleep(0.0005)
-        raise TimeoutError(f'等不到 t = {self.sim_time:.2f} s 的状态')
+        raise TimeoutError(f'Timed out waiting for state at t = {self.sim_time:.2f} s')
 
     def enable(self, i, on):
         msg = self.msgs['Boolean']()
@@ -179,10 +177,10 @@ class GazeboMultiTello:
         msg.position.z = float(rel_pos[2]) + BODY_OFFSET_Z
         msg.orientation.w = 1.0
         if not self._request(f'/world/{WORLD_NAME}/set_pose', msg):
-            raise RuntimeError(f'set_pose(tello_{i + 1}) 请求失败')
+            raise RuntimeError(f'set_pose(tello_{i + 1}) request failed')
 
     def set_camera(self, position, yaw, pitch):
-        """移动录像摄像机（pitch > 0 向下看）。"""
+        """Set camera."""
         cy, sy, cp, sp = np.cos(yaw / 2), np.sin(yaw / 2), np.cos(pitch / 2), np.sin(pitch / 2)
         msg = self.msgs['Pose']()
         msg.name = 'recorder_camera'
@@ -191,7 +189,7 @@ class GazeboMultiTello:
         self._request(f'/world/{WORLD_NAME}/set_pose', msg)
 
     def state(self):
-        """返回 (相对平台面的位置 (N,3), 世界系速度 (N,3), 当前画面或 None)。"""
+        """State."""
         with self.lock:
             odom = list(self.odom)
             image = self.image[1] if self.image is not None else None

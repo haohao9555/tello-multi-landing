@@ -1,9 +1,4 @@
-"""HAPPO actor（Kuba et al. ICLR 2022）：每个 agent 一个独立的 Gaussian 策略网络，参数不共享。
-
-单个 agent：h = enc(o_i)（MLP 或 GRU），μ_i = W2·relu(W1·h)，raw_i ~ N(μ_i, σ_i²)，a_i = sigmoid(raw_i)。
-对外接口带 agent 维 N（与其他算法一致），内部按 agent 切片分别前向；顺序更新在 algorithms/happo.py。
-约定：B=batch，N=agent 数，A=动作维（含 padding，由 action_mask 屏蔽），H=隐藏维。
-"""
+"""Happo."""
 
 import math
 
@@ -13,7 +8,7 @@ from torch.nn import functional as F
 
 
 class AgentActor(nn.Module):
-    """单个 agent 的策略网络；内部张量保留长度为 1 的 agent 维。"""
+    """Agentactor."""
 
     def __init__(self, input_dim, action_mask, config):
         super().__init__()
@@ -28,7 +23,7 @@ class AgentActor(nn.Module):
         self.mu_fc1 = nn.Linear(width, width)
         self.mu_fc2 = nn.Linear(width, self.n_actions)
 
-        sigma = config["sigma"]                 # 把 σ 的初值反解成可学习参数 raw 的初值
+        sigma = config["sigma"]
         if sigma["parameterization"] == "sigmoid":
             probability = (sigma["initial"] - sigma["minimum"]) / (sigma["maximum"] - sigma["minimum"])
             raw = math.log(probability / (1.0 - probability))
@@ -48,7 +43,7 @@ class AgentActor(nn.Module):
         return next_hidden.reshape(batch_size, 1, self.hidden_dim)
 
     def encode_sequence(self, inputs, bptt_steps=None):
-        """inputs [B,T,1,F] -> [B,T,1,H]；bptt_steps 为 GRU 梯度截断长度（None=整局）。"""
+        """Encode sequence."""
         batch_size, length, _, _ = inputs.shape
         features = F.relu(self.fc1(inputs))
         if not self.use_gru:
@@ -68,7 +63,7 @@ class AgentActor(nn.Module):
         return self.mu_fc2(F.relu(self.mu_fc1(features))) * self.action_mask
 
     def sigma(self):
-        """sigmoid：σ ∈ [minimum, maximum]；exp：σ = floor + exp(raw)。"""
+        """sigmoid: σ ∈ [minimum, maximum]；exp: σ = floor + exp(raw)。"""
         settings = self.sigma_config
         if settings["parameterization"] == "exp":
             return settings["floor"] + self.raw_sigma.exp()
@@ -102,7 +97,7 @@ class HAPPOActor(nn.Module):
 
     @torch.no_grad()
     def sample_actions(self, inputs, hidden, latent, sample_noise=True):
-        """各 agent 用自己的网络独立采样；latent 只为与其他算法接口一致而保存。"""
+        """Sample actions."""
         samples, features = [], []
         for i, agent in enumerate(self.agents):
             feature = agent.encode(inputs[:, i : i + 1], hidden[:, i : i + 1])
@@ -121,7 +116,7 @@ class HAPPOActor(nn.Module):
         return {key: torch.cat([sample[key] for sample in samples], dim=1) for key in samples[0]}, torch.cat(features, dim=1)
 
     def evaluate_agent(self, index, inputs, raw_actions, indices, bptt_steps=None):
-        """只重算第 index 个 agent：inputs [B,T,N,F]、raw_actions [B·T,N,A] -> log_probs [M]、entropy 标量。"""
+        """Evaluate agent."""
         agent = self.agents[index]
         features = agent.encode_sequence(inputs[:, :, index : index + 1], bptt_steps).reshape(-1, 1, self.hidden_dim)
         mean = agent.mean(features[indices])

@@ -1,14 +1,4 @@
-"""MAT actor（Wen et al. NeurIPS 2022）：agent 间 Transformer encoder + 按固定 agent 顺序自回归的 decoder。
-
-- encoder：对 N 个 agent 的观测编码做 self-attention；
-- decoder：输入右移一位的动作序列（首位为起始标记），先做 causal self-attention，
-  再以 encoder 表示为 query、动作序列为 key/value 做 causal cross-attention；
-- 采样：逐 agent 自回归，agent i 条件于 agent 1..i-1 已采样的环境动作；
-- PPO 重算：用已存动作 teacher forcing，一次并行得到逐 agent 条件 log p。
-简化：critic 用公共 centralized critic（models/common_critic.py），不用 MAT 原版的 encoder 价值头。
-初始化同官方：attention 的 q/k/v/输出 N(0, 0.02²)、bias 0；其余线性层正交初始化，
-带激活的层 gain=ReLU 增益，末层 gain=0.01。
-"""
+"""Mat."""
 
 import math
 
@@ -18,14 +8,14 @@ from torch.nn import functional as F
 
 
 def init_(layer, activate=False, gain=0.01):
-    """官方 init_：正交权重、零 bias；带激活时 gain 取 ReLU 增益。"""
+    """Init."""
     nn.init.orthogonal_(layer.weight, gain=nn.init.calculate_gain("relu") if activate else gain)
     nn.init.zeros_(layer.bias)
     return layer
 
 
 class SelfAttention(nn.Module):
-    """多头注意力；causal=True 时 agent i 只看 agent ≤ i。"""
+    """Selfattention."""
 
     def __init__(self, width, heads, causal):
         super().__init__()
@@ -75,7 +65,7 @@ class DecodeBlock(nn.Module):
 
     def forward(self, x, encoded):
         x = self.norm1(x + self.self_attention(x, x, x))
-        # 与官方 DecodeBlock 一致：query 为 encoder 表示，key/value 为动作序列。
+
         x = self.norm2(encoded + self.cross_attention(encoded, x, x))
         return self.norm3(x + self.mlp(x))
 
@@ -83,8 +73,7 @@ class DecodeBlock(nn.Module):
 
 
 class MATActor(nn.Module):
-    """观测编码（MLP 或 GRU）-> Transformer encoder -> 自回归 decoder -> Gaussian 均值。
-    约定：B=batch，N=agent 数，A=动作维（含 padding，由 action_mask 屏蔽），H=隐藏维。"""
+    """Matactor."""
 
     def __init__(self, input_dim, env_info, config):
         super().__init__()
@@ -100,14 +89,14 @@ class MATActor(nn.Module):
         self.rnn = nn.GRU(width, width) if self.use_gru else nn.Linear(width, width)
         self.encoder = nn.ModuleList(EncodeBlock(width, heads) for _ in range(layers))
         self.decoder = nn.ModuleList(DecodeBlock(width, heads) for _ in range(layers))
-        # 动作 token：[起始标记, 上一个 agent 的环境动作]。
+
         self.action_embedding = nn.Sequential(init_(nn.Linear(self.n_actions + 1, width), activate=True), nn.GELU())
         self.mu_head = nn.Sequential(
             init_(nn.Linear(width, width), activate=True), nn.GELU(), nn.LayerNorm(width),
             init_(nn.Linear(width, self.n_actions)),
         )
 
-        sigma = config["sigma"]                 # 把 σ 的初值反解成可学习参数 raw 的初值
+        sigma = config["sigma"]
         if sigma["parameterization"] == "sigmoid":
             probability = (sigma["initial"] - sigma["minimum"]) / (sigma["maximum"] - sigma["minimum"])
             raw = math.log(probability / (1.0 - probability))
@@ -115,13 +104,13 @@ class MATActor(nn.Module):
             raw = math.log(sigma["initial"] - sigma["floor"])
         self.raw_sigma = nn.Parameter(torch.full((self.n_agents, self.n_actions), raw))
 
-    # ---------- 观测编码：采样时单步，训练时整段 ----------
+
 
     def init_hidden(self, batch_size):
         return self.fc1.weight.new_zeros(batch_size, self.n_agents, self.hidden_dim)
 
     def encode(self, inputs, hidden):
-        """inputs [B,N,F] -> features [B,N,H]；GRU 时 features 即下一步 hidden。"""
+        """Encode."""
         batch_size = inputs.shape[0]
         features = F.relu(self.fc1(inputs))
         if not self.use_gru:
@@ -133,7 +122,7 @@ class MATActor(nn.Module):
         return next_hidden.reshape(batch_size, self.n_agents, self.hidden_dim)
 
     def encode_sequence(self, inputs, bptt_steps=None):
-        """inputs [B,T,N,F] -> [B,T,N,H]；bptt_steps 为 GRU 梯度截断长度（None=整局）。"""
+        """Encode sequence."""
         batch_size, length, n_agents, _ = inputs.shape
         features = F.relu(self.fc1(inputs))
         if not self.use_gru:
@@ -158,7 +147,7 @@ class MATActor(nn.Module):
         return encoded
 
     def decode(self, encoded, previous_actions):
-        """previous_actions [M,N,A]：agent i 位置放 agent i-1 的环境动作；返回均值 [M,N,A]。"""
+        """Decode."""
         start = previous_actions.new_zeros(*previous_actions.shape[:-1], 1)
         start[:, 0] = 1
         tokens = self.action_embedding(torch.cat((start, previous_actions), dim=-1))
@@ -172,17 +161,17 @@ class MATActor(nn.Module):
         shifted[:, 1:] = actions[:, :-1]
         return shifted
 
-    # ---------- 高斯 ----------
+
 
     def sigma(self):
-        """sigmoid：σ ∈ [minimum, maximum]；exp：σ = floor + exp(raw)。"""
+        """sigmoid: σ ∈ [minimum, maximum]；exp: σ = floor + exp(raw)。"""
         settings = self.sigma_config
         if settings["parameterization"] == "exp":
             return settings["floor"] + self.raw_sigma.exp()
         return settings["minimum"] + (settings["maximum"] - settings["minimum"]) * self.raw_sigma.sigmoid()
 
     def log_prob(self, raw_action, mean):
-        """逐 agent 条件高斯 log p（条件于前序 agent 的动作），只对有效动作维求和。"""
+        """Log prob."""
         sigma = self.sigma()
         per_dimension = -0.5 * ((raw_action - mean) / sigma).square() - sigma.log() - 0.5 * math.log(2.0 * math.pi)
         return (per_dimension * self.action_mask).sum(dim=-1)
@@ -193,7 +182,7 @@ class MATActor(nn.Module):
 
     @torch.no_grad()
     def sample_actions(self, inputs, hidden, latent, sample_noise=True):
-        """逐 agent 自回归采样；输入 decoder 的是 sigmoid 后的环境动作。latent 仅为接口占位。"""
+        """Sample actions."""
         features = self.encode(inputs, hidden)
         encoded = self.encode_agents(features)
         sigma = self.sigma()
@@ -216,7 +205,7 @@ class MATActor(nn.Module):
         }, features
 
     def evaluate_actions(self, inputs, raw_actions, indices, bptt_steps=None):
-        """teacher forcing：用已存动作一次并行得到逐 agent 条件均值。"""
+        """Evaluate actions."""
         features = self.encode_sequence(inputs, bptt_steps).reshape(-1, self.n_agents, self.hidden_dim)
         raw = raw_actions[indices]
         mean = self.decode(self.encode_agents(features[indices]), self.shift(raw.sigmoid() * self.action_mask))

@@ -3,7 +3,7 @@
 <package format="3">
   <name>tello_sim_description</name>
   <version>0.1.0</version>
-  <description>Tello 降落仿真的 Gazebo 资源：Tello 模型、降落板、带风场的 world</description>
+  <description>Gazebo resources for Tello landing: aircraft, landing pad and windy world</description>
   <maintainer email="243935570+haohao9555@users.noreply.github.com">haohao9555</maintainer>
   <license>MIT</license>
 
