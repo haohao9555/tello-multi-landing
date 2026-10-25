@@ -7,6 +7,7 @@ from docx import Document
 from docx.shared import Inches,Pt,RGBColor
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from playwright.sync_api import sync_playwright
 
@@ -93,15 +94,24 @@ update=OxmlElement('w:updateFields');update.set(qn('w:val'),'true');settings.app
 
 def inline(paragraph,children):
     bold=italic=False
+    hyperlink=None
     for child in children or []:
         typ=child.type
         if typ=='strong_open':bold=True
         elif typ=='strong_close':bold=False
         elif typ=='em_open':italic=True
         elif typ=='em_close':italic=False
+        elif typ=='link_open':
+            hyperlink=OxmlElement('w:hyperlink')
+            hyperlink.set(qn('r:id'),paragraph.part.relate_to(child.attrGet('href'),RT.HYPERLINK,is_external=True))
+            paragraph._p.append(hyperlink)
+        elif typ=='link_close':hyperlink=None
         elif typ in ['text','code_inline']:
             r=paragraph.add_run(child.content);r.bold=bold;r.italic=italic
             if typ=='code_inline':r.font.name='Consolas';r.font.size=Pt(8.5)
+            if hyperlink is not None:
+                r.font.color.rgb=RGBColor.from_string('175D7B');r.underline=True
+                hyperlink.append(r._r)
         elif typ in ['softbreak','hardbreak']:paragraph.add_run().add_break()
         elif typ=='image':
             image=ROOT/child.attrGet('src')

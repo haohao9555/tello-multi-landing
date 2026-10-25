@@ -41,7 +41,7 @@ Appendices: A. Individual Contribution; B. Individual Contribution Split
 
 ## Abstract
 
-This project compares MAPPO and parameter-sharing PPO (IPPO) for four-drone landing under wind, observation noise and command delay. A custom environment models Tello and Matrice 30 (M30), while a browser GUI supports telemetry and Tello visualisation in Gazebo. Both algorithms produce continuous three-axis velocity commands. Each condition is evaluated over the same 100 episode seeds. After 1.5 million calm-weather steps, four-drone success was 100%/99% for Tello and 98%/98% for M30 (MAPPO/PPO). After 5 million wind-training steps, success was 90%/91% for Tello at 3 m/s and 45%/41% for M30 at 10 m/s. No collisions occurred in these evaluations. Wind-resistant landing precision remains the main challenge.
+This project compares MAPPO and parameter-sharing PPO (IPPO) for four-drone landing under wind, observation noise and command delay. A custom environment models Tello and Matrice 30 (M30), while a browser GUI supports telemetry and Tello visualisation in Gazebo. Both algorithms produce continuous three-axis velocity commands. Each condition is evaluated over the same 100 episode seeds. After 1.5 million calm-weather steps, four-drone success was 100%/99% for Tello and 98%/98% for M30 (MAPPO/PPO). After 5 million wind-training steps, success was 90%/91% for Tello at 3 m/s and 45%/41% for M30 at 10 m/s. No collisions occurred in these evaluations. Wind-resistant landing precision remains the main challenge. The implementation is available at [https://github.com/haohao9555/tello-multi-landing](https://github.com/haohao9555/tello-multi-landing).
 
 ## 1. Introduction and Background
 
