@@ -18,23 +18,23 @@
 
 ## Table of Contents
 
-Abstract\
-1. Introduction and Background\
-1.1 The Problem We Tried to Solve\
-1.2 Motivation\
-1.3 Application\
-1.4 Dataset/Environment\
-2. Overview of the Architecture/System\
-2.1 Workflow\
-2.2 System Architecture Design\
-2.3 GUI/Environment Design\
-3. Results and Evaluation\
-3.1 Experimental Settings\
-3.2 Pre-Processing\
-3.3 Experimental Results\
-3.4 Limitations\
-4. Discussion and Conclusions\
-5. References\
+Abstract  
+1. Introduction and Background  
+1.1 The Problem We Tried to Solve  
+1.2 Motivation  
+1.3 Application  
+1.4 Dataset/Environment  
+2. Overview of the Architecture/System  
+2.1 Workflow  
+2.2 System Architecture Design  
+2.3 GUI/Environment Design  
+3. Results and Evaluation  
+3.1 Experimental Settings  
+3.2 Pre-Processing  
+3.3 Experimental Results  
+3.4 Limitations  
+4. Discussion and Conclusions  
+5. References  
 Appendices: A. Individual Contribution; B. Individual Contribution Split
 
 ---
@@ -513,12 +513,9 @@ My main responsibility was the graphical user interface. I worked on the browser
 
 | Team member | Main responsibility | Percentage |
 |---|---|---|
-| Chenghao Zhuang | Models, training and evaluation | 33⅓% (approximately 33%) |
-| Bo Zhao | Project report | 33⅓% (approximately 33%) |
-| Junqi Zhang | GUI | 33⅓% (approximately 33%) |
-| Total | | 100% |
-
-Contributions are equal: one third per member (approximately 33%), totalling 100%.
+| Chenghao Zhuang | Models, training and evaluation | 33.3% |
+| Bo Zhao | Project report | 33.3% |
+| Junqi Zhang | GUI | 33.3% |
 
 **Signatures**
 

@@ -7,7 +7,7 @@ The report follows the required assignment structure and contains the completed 
 - Final evaluation: 100 episodes per model and condition.
 - Figures: recorded learning curves, final success rates, failure counts, GUI views, and actual successful, missed-platform, hard-landing, timeout and boundary-failure replays.
 - Cover: Group 74, no team-name field and no date.
-- Contributions: one third per member; Chenghao Zhuang handles models, Bo Zhao the report, and Junqi Zhang the GUI.
+- Contributions: 33.3% per member; Chenghao Zhuang handles models, Bo Zhao the report, and Junqi Zhang the GUI.
 - The final page provides name-and-colon fields for signing the PDF later.
 
 Files:
