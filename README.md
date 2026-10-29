@@ -118,7 +118,7 @@ Evaluation uses seeds 10,000 through 10,099 and writes JSON next to the checkpoi
 python gui/web_server.py --port 18080
 ```
 
-Open `http://127.0.0.1:18080`. On a remote machine, use SSH port forwarding. The GUI discovers compatible checkpoints below `runs/marl/`. Training outputs and model weights are excluded from Git; train a model or place compatible checkpoints with their configuration files in that directory. Manual Flight works without a trained checkpoint.
+Open `http://127.0.0.1:18080`. On a remote machine, use SSH port forwarding. The GUI discovers compatible checkpoints below `runs/marl/`. Four pretrained Tello checkpoints are included: MAPPO and PPO (IPPO), each at 0 and 3 m/s wind. Clone or pull this repository to use them immediately; see [pretrained models and evaluation results](docs/pretrained_models.md). Other training outputs remain excluded from Git. Manual Flight works without a trained checkpoint.
 
 Use W/S for world Y, A/D for world X, and arrow up/down for vertical commands. Hold or Space requests zero velocity. Zero velocity is not a guaranteed position hold under wind. Camera changes affect the Tello view rather than the policy command. See [GUI documentation](gui/README.md).
 

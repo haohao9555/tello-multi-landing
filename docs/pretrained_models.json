@@ -1,0 +1,50 @@
+[
+  {
+    "algorithm": "MAPPO",
+    "profile": "tello",
+    "wind_m_s": 0,
+    "checkpoint": "runs/marl/mappo/fixed_w0/seed_1/20261023T062020_041754Z/step_1500342.pt",
+    "config": "runs/marl/mappo/fixed_w0/seed_1/20261023T062020_041754Z/config.yaml",
+    "evaluation": "runs/marl/mappo/fixed_w0/seed_1/20261023T062020_041754Z/eval_step_1500342.json",
+    "size_bytes": 828643,
+    "sha256": "f2b9b190fc12c4ef43d0da2ea15a5da217b6894c3b046058cae2686f2ba35b37",
+    "fleet_success": 1.0,
+    "drone_success": 1.0
+  },
+  {
+    "algorithm": "PPO (IPPO)",
+    "profile": "tello",
+    "wind_m_s": 0,
+    "checkpoint": "runs/marl/ippo/tello_w0_ippo_aligned/seed_1/20261025T065528_339108Z/latest.pt",
+    "config": "runs/marl/ippo/tello_w0_ippo_aligned/seed_1/20261025T065528_339108Z/config.yaml",
+    "evaluation": "runs/marl/ippo/tello_w0_ippo_aligned/seed_1/20261025T065528_339108Z/eval_latest.json",
+    "size_bytes": 824733,
+    "sha256": "4778752af639e6503a25837698fb4aedb4ccdc5cc81efc4c44ecd14cec214025",
+    "fleet_success": 0.99,
+    "drone_success": 0.9975
+  },
+  {
+    "algorithm": "MAPPO",
+    "profile": "tello",
+    "wind_m_s": 3,
+    "checkpoint": "runs/marl/mappo/fixed_w3_ind/seed_1/20261023T070641_260637Z/latest.pt",
+    "config": "runs/marl/mappo/fixed_w3_ind/seed_1/20261023T070641_260637Z/config.yaml",
+    "evaluation": "runs/marl/mappo/fixed_w3_ind/seed_1/20261023T070641_260637Z/eval_latest.json",
+    "size_bytes": 825433,
+    "sha256": "98f5fc4917ce749b51ea6bc4ec44f18825ecb16b33322e9e4ad26efb457ddecf",
+    "fleet_success": 0.9,
+    "drone_success": 0.975
+  },
+  {
+    "algorithm": "PPO (IPPO)",
+    "profile": "tello",
+    "wind_m_s": 3,
+    "checkpoint": "runs/marl/ippo/tello_w3_ippo_aligned/seed_1/20261025T065528_297224Z/latest.pt",
+    "config": "runs/marl/ippo/tello_w3_ippo_aligned/seed_1/20261025T065528_297224Z/config.yaml",
+    "evaluation": "runs/marl/ippo/tello_w3_ippo_aligned/seed_1/20261025T065528_297224Z/eval_latest.json",
+    "size_bytes": 824733,
+    "sha256": "c0c0113b64e19cea4d33e69d62ccf91c346d4ca886f6c30546c0a6be59f423ab",
+    "fleet_success": 0.91,
+    "drone_success": 0.9775
+  }
+]
