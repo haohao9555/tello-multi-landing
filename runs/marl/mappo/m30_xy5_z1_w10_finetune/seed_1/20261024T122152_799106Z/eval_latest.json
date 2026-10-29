@@ -1,0 +1,56 @@
+[
+  {
+    "wind": 0.0,
+    "no_go_rate": 0.0,
+    "all_success": 0.79,
+    "drone_success": 0.94,
+    "collision_rate": 0.0,
+    "collided_drones": 0.0,
+    "min_sep": 3.843118303922751,
+    "landing_spread": 3.531,
+    "landing_error": 0.1307419602169515,
+    "time": 14.898734177215188,
+    "outcomes": {
+      "success": 376,
+      "missed": 22,
+      "hard_landing": 2
+    }
+  },
+  {
+    "wind": 10.0,
+    "no_go_rate": 0.0,
+    "all_success": 0.45,
+    "drone_success": 0.79,
+    "collision_rate": 0.0,
+    "collided_drones": 0.0,
+    "min_sep": 3.7401476353910166,
+    "landing_spread": 4.253000000000001,
+    "landing_error": 0.21333012401325213,
+    "time": 15.673333333333337,
+    "outcomes": {
+      "missed": 82,
+      "success": 316,
+      "hard_landing": 2
+    }
+  },
+  {
+    "wind": 15.0,
+    "no_go_rate": 0.0,
+    "all_success": 0.0,
+    "drone_success": 0.1325,
+    "collision_rate": 0.09,
+    "collided_drones": 0.11,
+    "min_sep": 3.8186544414379666,
+    "landing_spread": 23.21979166666667,
+    "landing_error": 5.893391507106261,
+    "time": null,
+    "outcomes": {
+      "collision": 11,
+      "missed": 271,
+      "out_of_bounds": 43,
+      "timeout": 20,
+      "success": 53,
+      "hard_landing": 2
+    }
+  }
+]

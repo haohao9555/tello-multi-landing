@@ -46,5 +46,53 @@
     "sha256": "c0c0113b64e19cea4d33e69d62ccf91c346d4ca886f6c30546c0a6be59f423ab",
     "fleet_success": 0.91,
     "drone_success": 0.9775
+  },
+  {
+    "algorithm": "MAPPO",
+    "profile": "m30",
+    "wind_m_s": 0,
+    "checkpoint": "runs/marl/mappo/m30_xy5_z1_w0_ind/seed_1/20261024T102750_403975Z/step_1500052.pt",
+    "config": "runs/marl/mappo/m30_xy5_z1_w0_ind/seed_1/20261024T102750_403975Z/config.yaml",
+    "evaluation": "runs/marl/mappo/m30_xy5_z1_w0_ind/seed_1/20261024T102750_403975Z/eval_step_1500052.json",
+    "size_bytes": 832289,
+    "sha256": "35700359e4f7ff682eba1db52e902c29d2f19ead2d4a49801e56e75fa2b73e64",
+    "fleet_success": 0.98,
+    "drone_success": 0.995
+  },
+  {
+    "algorithm": "PPO (IPPO)",
+    "profile": "m30",
+    "wind_m_s": 0,
+    "checkpoint": "runs/marl/ippo/m30_w0_ippo_aligned/seed_1/20261025T061033_329092Z/step_1500629.pt",
+    "config": "runs/marl/ippo/m30_w0_ippo_aligned/seed_1/20261025T061033_329092Z/config.yaml",
+    "evaluation": "runs/marl/ippo/m30_w0_ippo_aligned/seed_1/20261025T061033_329092Z/eval_step_1500629.json",
+    "size_bytes": 838689,
+    "sha256": "7d1b9a787ef284a5e7d2cc60dd924d50cb6b79d4462fc97a3a2aea248e2a4a39",
+    "fleet_success": 0.98,
+    "drone_success": 0.995
+  },
+  {
+    "algorithm": "MAPPO",
+    "profile": "m30",
+    "wind_m_s": 10,
+    "checkpoint": "runs/marl/mappo/m30_xy5_z1_w10_finetune/seed_1/20261024T122152_799106Z/latest.pt",
+    "config": "runs/marl/mappo/m30_xy5_z1_w10_finetune/seed_1/20261024T122152_799106Z/config.yaml",
+    "evaluation": "runs/marl/mappo/m30_xy5_z1_w10_finetune/seed_1/20261024T122152_799106Z/eval_latest.json",
+    "size_bytes": 829277,
+    "sha256": "48e89f2438eb78109576c5ab1fb94e8c3419cbad388fa3f127694d1e6137274f",
+    "fleet_success": 0.45,
+    "drone_success": 0.79
+  },
+  {
+    "algorithm": "PPO (IPPO)",
+    "profile": "m30",
+    "wind_m_s": 10,
+    "checkpoint": "runs/marl/ippo/m30_w10_ippo_aligned/seed_1/20261025T064900_015038Z/latest.pt",
+    "config": "runs/marl/ippo/m30_w10_ippo_aligned/seed_1/20261025T064900_015038Z/config.yaml",
+    "evaluation": "runs/marl/ippo/m30_w10_ippo_aligned/seed_1/20261025T064900_015038Z/eval_latest.json",
+    "size_bytes": 835677,
+    "sha256": "ff84b2658c2760bb0251822cf496923afa0396cb8c28d29c54a5e39dee1edbb2",
+    "fleet_success": 0.41,
+    "drone_success": 0.785
   }
 ]

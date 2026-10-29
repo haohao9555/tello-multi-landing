@@ -1,0 +1,66 @@
+seed: 1
+device: cpu
+num_threads: 1
+env:
+  scenario: TelloLanding
+  agent_conf: 4x3
+  episode_limit: 1200
+  num_envs: 8
+  wind_level: 10.0
+  reward: individual
+  v_max_xy: 5.0
+  profile: m30
+  action_history: 2
+  profile_overrides:
+    v_max_z: 1.0
+    max_steps: 1200
+network:
+  hidden_dim: 128
+  use_gru: false
+  use_agent_id: false
+sigma:
+  parameterization: sigmoid
+  initial: 0.45
+  minimum: 0.1
+  maximum: 0.5
+  floor: 0.0
+  state_dependent: false
+normalization:
+  observations: true
+  observation_clip: 10.0
+  rewards: true
+  returns: true
+training:
+  total_env_steps: 5000000
+  epochs: 5
+  minibatch_size: 4000
+  bptt_steps: null
+  gamma: 0.99
+  gae_lambda: 0.95
+  gae_value: online
+  target_tau: 0.01
+  normalize_advantages: true
+  clip_ratio: 0.1
+  log_ratio_clip: 3.0
+  entropy_coef: 0.0
+  grad_norm_clip: 10.0
+  actor_lr: 0.0005
+  critic_lr: 0.0005
+  optimizer_eps: 1.0e-08
+  critic_minibatches: 1
+  batch_steps: 0
+evaluation:
+  interval: 100000
+  episodes: 8
+  sample_flow_noise: false
+  sample_action_noise: false
+output:
+  directory: /workspace/tello_ws/runs/marl
+  experiment: m30_xy5_z1_w10_finetune
+  log_interval: 20000
+  checkpoint_interval: 20000
+action_squash: sigmoid
+algorithm: mappo
+initialization:
+  checkpoint: /workspace/tello_ws/runs/marl/mappo/m30_w0_xy5_z1_verified/seed_1/published/latest.pt
+  source_env_steps: 1761040

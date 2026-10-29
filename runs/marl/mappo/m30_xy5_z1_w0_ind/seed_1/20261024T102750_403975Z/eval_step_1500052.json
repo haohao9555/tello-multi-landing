@@ -1,0 +1,18 @@
+[
+  {
+    "wind": 0.0,
+    "no_go_rate": 0.0,
+    "all_success": 0.98,
+    "drone_success": 0.995,
+    "collision_rate": 0.0,
+    "collided_drones": 0.0,
+    "min_sep": 3.610267459987272,
+    "landing_spread": 4.213,
+    "landing_error": 0.08242311496243651,
+    "time": 17.233673469387757,
+    "outcomes": {
+      "success": 398,
+      "missed": 2
+    }
+  }
+]
